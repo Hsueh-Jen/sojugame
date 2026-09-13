@@ -99,40 +99,45 @@ const GROUND_Y = 460;
 const PIT_START = 860, PIT_END = 955;
 const LEVEL_WIDTH = 3200;
 const GATE_X = 3100;
-const MOVE_SPEED = 3.4;
+const MAX_SPEED = 3.5;       // 最大水平移動速度
+const ACCEL = 0.28;          // 地面起步加速度
+const DECEL = 0.32;          // 地面摩擦減速
+const AIR_ACCEL = 0.22;      // 空中水平加速度
+const AIR_DECEL = 0.08;      // 空中阻力減速
+const TURN_BOOST = 0.45;     // 轉向煞車加成
 const JUMP_V = -12.4;
-const PLAYER_DRAW_W = 76, PLAYER_DRAW_H = 68;
-const PLAYER_HIT_W = 46, PLAYER_HIT_H = 40;
-const ATTACK_W = 50, ATTACK_H = 34;
+const PLAYER_DRAW_W = 112, PLAYER_DRAW_H = 90;  // 放大角色渲染尺寸
+const PLAYER_HIT_W = 64,  PLAYER_HIT_H = 52;    // 對應碰撞箱
+const ATTACK_W = 62, ATTACK_H = 44;              // 咬擊判定放大
 const ATTACK_ACTIVE = 12;
 const ATTACK_COOLDOWN = 22;
 const HURT_IFRAMES = 80;
 
 // Spritesheet 切圖座標
+// ★ 關鍵修正：上排(sy=125, sh=365)與下排(sy=555, sh=365) 統一相同 sh，
+//   消除上/下排高度差導致幀之間角色大小不一的視覺問題。
 const SOJU_FRAMES = {
-  idle: { dur: 14, frames: [
-    { sx: 40, sy: 125, sw: 460, sh: 365 },
-    { sx: 560, sy: 125, sw: 460, sh: 365 },
-    { sx: 40, sy: 555, sw: 460, sh: 345 },
-    { sx: 560, sy: 555, sw: 460, sh: 345 },
+  idle: { dur: 16, frames: [
+    { sx: 60,  sy: 125, sw: 440, sh: 365 }, // 挺胸呼吸起（上排左）
+    { sx: 580, sy: 125, sw: 440, sh: 365 }, // 平穩呼吸伏（上排右）
   ]},
   run: { dur: 7, frames: [
-    { sx: 40, sy: 125, sw: 460, sh: 365 },
-    { sx: 560, sy: 125, sw: 460, sh: 365 },
-    { sx: 40, sy: 555, sw: 460, sh: 345 },
-    { sx: 560, sy: 555, sw: 460, sh: 345 },
+    { sx: 40,  sy: 125, sw: 460, sh: 365 }, // 跑步 F1（上排左）
+    { sx: 560, sy: 125, sw: 460, sh: 365 }, // 跑步 F2（上排右）
+    { sx: 40,  sy: 555, sw: 460, sh: 365 }, // 跑步 F3（下排左，sh 統一 365）
+    { sx: 560, sy: 555, sw: 460, sh: 365 }, // 跑步 F4（下排右，sh 統一 365）
   ]},
   jump: { dur: 9, frames: [
-    { sx: 40, sy: 125, sw: 460, sh: 365 },
+    { sx: 40,  sy: 125, sw: 460, sh: 365 },
     { sx: 560, sy: 125, sw: 460, sh: 365 },
-    { sx: 40, sy: 555, sw: 460, sh: 345 },
-    { sx: 560, sy: 555, sw: 460, sh: 345 },
+    { sx: 40,  sy: 555, sw: 460, sh: 365 },
+    { sx: 560, sy: 555, sw: 460, sh: 365 },
   ]},
   bite: { dur: 4, frames: [
-    { sx: 40, sy: 125, sw: 460, sh: 365 },
+    { sx: 40,  sy: 125, sw: 460, sh: 365 },
     { sx: 560, sy: 125, sw: 460, sh: 365 },
-    { sx: 40, sy: 555, sw: 460, sh: 345 },
-    { sx: 560, sy: 555, sw: 460, sh: 345 },
+    { sx: 40,  sy: 555, sw: 460, sh: 365 },
+    { sx: 560, sy: 555, sw: 460, sh: 365 },
   ]},
 };
 const OWNER_FRAME = { sx: 410, sy: 30, sw: 280, sh: 890 };
@@ -233,11 +238,17 @@ function tone(type, freqStart, freqEnd, duration, vol = 0.18) {
   osc.start(); osc.stop(audioCtx.currentTime + duration + 0.01);
 }
 const SFX = {
-  jump:    () => tone('square',  440, 880, 0.12),
-  bite:    () => tone('sawtooth',200,  70, 0.07),
-  hurt:    () => tone('sawtooth',320, 110, 0.22),
-  kill:    () => tone('square',  500, 900, 0.08),
-  bosshit: () => tone('square',  160,  95, 0.16),
+  jump:     () => tone('square',   440, 880, 0.12),
+  bite:     () => tone('sawtooth', 200,  70, 0.07),
+  hurt:     () => tone('sawtooth', 320, 110, 0.22),
+  kill:     () => tone('square',   500, 900, 0.08),
+  bosshit:  () => tone('square',   160,  95, 0.16),
+  // 打擊感音效模組
+  hitLight: () => { tone('triangle', 260, 60, 0.08, 0.24); tone('sawtooth', 200, 50, 0.05, 0.18); },
+  hitHeavy: () => { tone('triangle', 150, 35, 0.18, 0.38); tone('sawtooth', 280, 35, 0.12, 0.26); },
+  launch:   () => tone('sine', 180, 820, 0.16, 0.24),
+  airHit:   () => { tone('triangle', 340, 90, 0.08, 0.22); tone('square', 450, 130, 0.05, 0.16); },
+  cancel:   () => tone('sine', 520, 800, 0.06, 0.15),
 };
 const NOTE_FREQ = {C4:261.63,D4:293.66,E4:329.63,F4:349.23,G4:392,A4:440,Bb4:466.16,C5:523.25};
 const BIRTHDAY = [
@@ -335,20 +346,371 @@ const DECOR_DEFS = [
 
 function makeEnemyDefs() {
   return [
-    { type:'slipper', x:120,  y:GROUND_Y-32, w:48, h:32, dir:1, range:[100, 300],  speed:1.3, pause:0, baseY:GROUND_Y-32 },
-    { type:'slipper', x:300,  y:390-32,      w:48, h:32, dir:1, range:[250, 405],  speed:1.3, pause:0, baseY:390-32 },
-    { type:'dyson',   x:600,  y:GROUND_Y-66, w:44, h:66, dir:1, range:[560, 820],  speed:3.9, pause:0, baseY:GROUND_Y-66 },
-    { type:'ball',    x:1150, y:GROUND_Y-32, w:32, h:32, vy:0,                              baseY:GROUND_Y-32 },
-    { type:'slipper', x:1380, y:395-32,      w:48, h:32, dir:1, range:[1360,1485], speed:1.3, pause:0, baseY:395-32 },
-    { type:'dyson',   x:1700, y:GROUND_Y-66, w:44, h:66, dir:1, range:[1650,1950], speed:3.9, pause:0, baseY:GROUND_Y-66 },
-    { type:'ball',    x:2050, y:GROUND_Y-32, w:32, h:32, vy:0,                              baseY:GROUND_Y-32 },
-    { type:'slipper', x:2200, y:GROUND_Y-32, w:48, h:32, dir:1, range:[2150,2350], speed:1.3, pause:0, baseY:GROUND_Y-32 },
-    { type:'slipper', x:2950, y:GROUND_Y-32, w:48, h:32, dir:1, range:[2900,3060], speed:1.3, pause:0, baseY:GROUND_Y-32 },
+    { type:'slipper', x:120,  y:GROUND_Y-32, w:48, h:32, dir:1, range:[100, 300],  speed:1.3, pause:0, baseY:GROUND_Y-32, hp:3, maxHp:3 },
+    { type:'slipper', x:300,  y:390-32,      w:48, h:32, dir:1, range:[250, 405],  speed:1.3, pause:0, baseY:390-32,      hp:3, maxHp:3 },
+    { type:'dyson',   x:600,  y:GROUND_Y-66, w:44, h:66, dir:1, range:[560, 820],  speed:3.9, pause:0, baseY:GROUND_Y-66, hp:4, maxHp:4 },
+    { type:'ball',    x:1150, y:GROUND_Y-32, w:32, h:32, vy:0,                              baseY:GROUND_Y-32,      hp:2, maxHp:2 },
+    { type:'slipper', x:1380, y:395-32,      w:48, h:32, dir:1, range:[1360,1485], speed:1.3, pause:0, baseY:395-32,      hp:3, maxHp:3 },
+    { type:'dyson',   x:1700, y:GROUND_Y-66, w:44, h:66, dir:1, range:[1650,1950], speed:3.9, pause:0, baseY:GROUND_Y-66, hp:4, maxHp:4 },
+    { type:'ball',    x:2050, y:GROUND_Y-32, w:32, h:32, vy:0,                              baseY:GROUND_Y-32,      hp:2, maxHp:2 },
+    { type:'slipper', x:2200, y:GROUND_Y-32, w:48, h:32, dir:1, range:[2150,2350], speed:1.3, pause:0, baseY:GROUND_Y-32, hp:3, maxHp:3 },
+    { type:'slipper', x:2950, y:GROUND_Y-32, w:48, h:32, dir:1, range:[2900,3060], speed:1.3, pause:0, baseY:GROUND_Y-32, hp:3, maxHp:3 },
   ];
 }
 
 // ═══════════════════════════════════════════════════════════
-// 6. 輸入管理
+// 6. 戰鬥與打擊感模組 (Mario-Combat Juice System)
+// ═══════════════════════════════════════════════════════════
+
+// 6.1 Hitbox 與 Hurtbox 碰撞與接觸點 (Contact Point)
+class Hitbox {
+  constructor(x, y, w, h) {
+    this.x = x; this.y = y; this.w = w; this.h = h;
+  }
+  static checkOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x &&
+           a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+  // 計算兩個包圍盒重疊區域的幾何中心點 (Contact Point)
+  static getContactPoint(a, b) {
+    const minX = Math.max(a.x, b.x);
+    const maxX = Math.min(a.x + a.w, b.x + b.w);
+    const minY = Math.max(a.y, b.y);
+    const maxY = Math.min(a.y + a.h, b.y + b.h);
+    return {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2
+    };
+  }
+}
+
+// 6.2 打擊停頓模組 (Hitstop / Frame Freeze)
+// 命中間隔 3-7 幀凍結主邏輯與動畫位移，產生極沉重之打擊肉感
+const Hitstop = {
+  frames: 0,
+  trigger(f) {
+    this.frames = Math.max(this.frames, f);
+  },
+  update() {
+    if (this.frames > 0) {
+      this.frames--;
+      return true; // 正在 Hitstop 凍結中
+    }
+    return false;
+  }
+};
+
+// 6.3 輕量級隨機震屏模組 (Camera Shake)
+const CameraShake = {
+  trauma: 0,
+  offsetX: 0,
+  offsetY: 0,
+  decay: 0.80,
+
+  shake(amount) {
+    this.trauma = Math.min(10, Math.max(this.trauma, amount));
+  },
+
+  update() {
+    if (this.trauma > 0.25) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = this.trauma * (0.6 + Math.random() * 0.4);
+      this.offsetX = Math.cos(angle) * dist;
+      this.offsetY = Math.sin(angle) * dist;
+      this.trauma *= this.decay;
+    } else {
+      this.offsetX = 0;
+      this.offsetY = 0;
+      this.trauma = 0;
+    }
+  }
+};
+
+// 6.4 動態輸入快取模組 (Input Buffering ~150ms)
+const InputBuffer = {
+  queue: [],
+  BUFFER_MS: 150, // 150ms 視窗
+
+  push(action) {
+    this.queue.push({ action, time: performance.now() });
+    if (this.queue.length > 12) this.queue.shift();
+  },
+
+  has(action) {
+    const now = performance.now();
+    return this.queue.some(item => item.action === action && (now - item.time) <= this.BUFFER_MS);
+  },
+
+  consume(action) {
+    const now = performance.now();
+    const idx = this.queue.findIndex(item => item.action === action && (now - item.time) <= this.BUFFER_MS);
+    if (idx !== -1) {
+      this.queue.splice(idx, 1);
+      return true;
+    }
+    return false;
+  },
+
+  cleanup() {
+    const now = performance.now();
+    this.queue = this.queue.filter(item => (now - item.time) <= this.BUFFER_MS);
+  },
+
+  clear() {
+    this.queue = [];
+  }
+};
+
+// 6.5 招式定義庫 (Attack Definitions, Knockback Vectors & Cancels)
+const ATTACK_TYPES = {
+  LIGHT: {
+    id: 'light',
+    name: '輕咬 (Light Snapping)',
+    activeFrames: 8,
+    recoveryFrames: 11,
+    hitstop: 4,               // 4 幀停頓 (~66ms)
+    shake: 1.8,               // 1.8px 輕震
+    damage: 1,
+    kbX: 3.2,                 // 小幅後退
+    kbY: -1.6,
+    hitStun: 18,
+    canJumpCancelOnHit: false,
+    sfx: 'hitLight'
+  },
+  MEDIUM: {
+    id: 'medium',
+    name: '二段咬 (Double Bite)',
+    activeFrames: 9,
+    recoveryFrames: 13,
+    hitstop: 5,               // 5 幀停頓
+    shake: 3.2,               // 3.2px 中等震動
+    damage: 1,
+    kbX: 4.5,
+    kbY: -2.4,
+    hitStun: 22,
+    canJumpCancelOnHit: false,
+    sfx: 'hitLight'
+  },
+  UPPERCUT: {
+    id: 'uppercut',
+    name: '升龍上勾咬 (Launcher)',
+    activeFrames: 12,
+    recoveryFrames: 16,
+    hitstop: 7,               // 7 幀沉重卡頓 (~116ms)
+    shake: 6.5,               // 6.5px 強烈震動
+    damage: 2,
+    kbX: 2.0,                 // 浮空向上！
+    kbY: -11.2,               // 給予強大 Y 軸擊飛衝量，進入空中連擊！
+    hitStun: 44,
+    canJumpCancelOnHit: true, // 核心：命中後可立即跳躍取消 (Jump Cancel)！
+    sfx: 'launch'
+  },
+  AERIAL: {
+    id: 'aerial',
+    name: '空中追擊撲咬 (Air Juggle Bite)',
+    activeFrames: 9,
+    recoveryFrames: 12,
+    hitstop: 5,               // 5 幀空中停頓
+    shake: 3.8,
+    damage: 1.5,
+    kbX: 3.6,
+    kbY: -4.6,                // 維持敵人空中浮空高度 (Air Juggle Physics)
+    hitStun: 26,
+    canJumpCancelOnHit: false,
+    sfx: 'airHit'
+  }
+};
+
+// 6.6 視覺特效與打擊點 Hook 系統 (VFX Spawn Hooks)
+const VFXManager = {
+  particles: [],
+  rings: [],
+  slashes: [],
+  floatingTexts: [],
+  hooks: [],
+
+  // 外部事件監聽註冊 Hook
+  onHit(fn) {
+    this.hooks.push(fn);
+  },
+
+  // 觸發打擊特效廣播
+  emitHit(event) {
+    // 執行已註冊的 Hook 監聽器
+    for (const hook of this.hooks) {
+      try { hook(event); } catch (e) { console.error('VFX Hook error:', e); }
+    }
+
+    const { contactX, contactY, move, isKill, facing } = event;
+    const isHeavy = move.id === 'uppercut' || isKill;
+
+    // 1. 打擊火花 (Hit Sparks)
+    const sparkCount = isHeavy ? 14 : 7;
+    for (let i = 0; i < sparkCount; i++) {
+      const baseAngle = facing > 0 ? 0 : Math.PI;
+      const spread = (Math.random() - 0.5) * 1.5;
+      const angle = baseAngle + spread;
+      const speed = (isHeavy ? 4.5 : 2.8) + Math.random() * 4.0;
+      this.particles.push({
+        x: contactX,
+        y: contactY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - (Math.random() * 2.5),
+        life: 14 + Math.floor(Math.random() * 8),
+        maxLife: 22,
+        size: isHeavy ? (3 + Math.random() * 3) : (2 + Math.random() * 2),
+        color: isHeavy ? ['#ffffff', '#ffea00', '#ff3b30'][i % 3] : ['#ffffff', '#ffe566', '#ff9500'][i % 3]
+      });
+    }
+
+    // 2. 擴散衝擊氣浪環 (Impact Ring)
+    this.rings.push({
+      x: contactX,
+      y: contactY,
+      radius: 6,
+      maxRadius: isHeavy ? 38 : 22,
+      alpha: 1,
+      color: isHeavy ? '#fff066' : '#ffffff',
+      lineWidth: isHeavy ? 4 : 2
+    });
+
+    // 3. 抓痕/咬痕光弧 (Slash Arc)
+    this.slashes.push({
+      x: contactX,
+      y: contactY,
+      facing: facing,
+      angle: isHeavy ? -Math.PI / 4 : 0,
+      length: isHeavy ? 45 : 30,
+      life: 8,
+      maxLife: 8,
+      color: isHeavy ? '#ffdd44' : '#ffffff'
+    });
+
+    // 4. 浮動打擊文字 (Combo / Damage text)
+    let txt = '';
+    let txtColor = '#ffffff';
+    if (isKill) {
+      txt = 'K.O.!';
+      txtColor = '#ff3b30';
+    } else if (move.id === 'uppercut') {
+      txt = 'LAUNCH!';
+      txtColor = '#ff9500';
+    } else if (event.comboCount >= 2) {
+      txt = `${event.comboCount} HITS!`;
+      txtColor = '#ffcc00';
+    }
+    if (txt) {
+      this.floatingTexts.push({
+        text: txt,
+        x: contactX,
+        y: contactY - 14,
+        vy: -1.6,
+        life: 32,
+        maxLife: 32,
+        color: txtColor,
+        scale: isHeavy ? 1.3 : 1.0
+      });
+    }
+  },
+
+  spawnJumpCancelDust(x, y) {
+    for (let i = 0; i < 6; i++) {
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 20,
+        y: y,
+        vx: (Math.random() - 0.5) * 4,
+        vy: -Math.random() * 2.5,
+        life: 12,
+        maxLife: 12,
+        size: 3,
+        color: 'rgba(255, 230, 180, 0.8)'
+      });
+    }
+  },
+
+  update() {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.18;
+      p.life--;
+      if (p.life <= 0) this.particles.splice(i, 1);
+    }
+    for (let i = this.rings.length - 1; i >= 0; i--) {
+      const r = this.rings[i];
+      r.radius += (r.maxRadius - r.radius) * 0.32;
+      r.alpha -= 0.1;
+      if (r.alpha <= 0) this.rings.splice(i, 1);
+    }
+    for (let i = this.slashes.length - 1; i >= 0; i--) {
+      const s = this.slashes[i];
+      s.life--;
+      if (s.life <= 0) this.slashes.splice(i, 1);
+    }
+    for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+      const t = this.floatingTexts[i];
+      t.y += t.vy;
+      t.vy *= 0.92;
+      t.life--;
+      if (t.life <= 0) this.floatingTexts.splice(i, 1);
+    }
+  },
+
+  render(ctx, camX) {
+    ctx.save();
+    // 氣浪環
+    for (const r of this.rings) {
+      ctx.beginPath();
+      ctx.arc(r.x - camX, r.y, r.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = r.color;
+      ctx.lineWidth = r.lineWidth;
+      ctx.globalAlpha = Math.max(0, r.alpha);
+      ctx.stroke();
+    }
+    // 光弧
+    for (const s of this.slashes) {
+      const progress = 1 - (s.life / s.maxLife);
+      ctx.save();
+      ctx.translate(s.x - camX, s.y);
+      if (s.facing < 0) ctx.scale(-1, 1);
+      ctx.rotate(s.angle);
+      ctx.beginPath();
+      ctx.arc(0, 0, s.length, -Math.PI / 4, Math.PI / 4);
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 3 * (1 - progress);
+      ctx.globalAlpha = 1 - progress;
+      ctx.stroke();
+      ctx.restore();
+    }
+    // 打擊火花
+    for (const p of this.particles) {
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+      ctx.beginPath();
+      ctx.arc(p.x - camX, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 浮動文字
+    for (const t of this.floatingTexts) {
+      const alpha = Math.max(0, t.life / t.maxLife);
+      ctx.save();
+      ctx.font = `bold ${Math.round(15 * t.scale)}px 'Arial Black', sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = t.color;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = alpha;
+      ctx.strokeText(t.text, t.x - camX, t.y);
+      ctx.fillText(t.text, t.x - camX, t.y);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// 7. 輸入管理 (含動態輸入快取掛載)
 // ═══════════════════════════════════════════════════════════
 const keys = {};
 const justPressed = {};
@@ -357,10 +719,16 @@ let gameState = 'LOADING';
 window.addEventListener('keydown', (e) => {
   if (gameState === 'WIN') return;
   const k = e.key === ' ' ? 'Space' : e.key;
-  if (!keys[k]) { justPressed[k] = true; }
+  if (!keys[k]) {
+    justPressed[k] = true;
+    if (k === 'Space') InputBuffer.push('attack');
+    if (k === 'ArrowUp' || k === 'w' || k === 'W') InputBuffer.push('jump');
+  }
   keys[k] = true;
   ensureAudio();
-  e.preventDefault();
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(k)) {
+    e.preventDefault();
+  }
 });
 window.addEventListener('keyup', (e) => {
   const k = e.key === ' ' ? 'Space' : e.key;
@@ -371,7 +739,7 @@ function clearJustPressed() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// 7. 遊戲狀態
+// 8. 遊戲狀態
 // ═══════════════════════════════════════════════════════════
 let state = 'TITLE';
 let storyScene = 0;
@@ -400,6 +768,14 @@ function makePlayer() {
     hurtFrames: 0,
     attackFrames: 0,
     attackCooldown: 0,
+    attackMove: null,         // 當前發動的招式 (ATTACK_TYPES)
+    attackHasHit: false,      // 本次攻擊判定是否已成功命中
+    jumpCancelable: false,    // 是否可跳躍取消
+    canComboCancel: false,    // 是否可連招取消
+    comboStage: 0,            // 連招段數 0, 1, 2
+    comboTimer: 0,            // 連招輸入間隔計時
+    comboCount: 0,            // 連擊總數計數器
+    comboResetTimer: 0,       // 連擊中斷計時
     anim: 'idle', animTick: 0, animFrame: 0,
   };
 }
@@ -416,23 +792,38 @@ function makeBoss() {
     revealed: false,
     facing: -1,
     vy: 0, onGround: true,
+    flashTimer: 0,
     summonedEnemies: [],
   };
 }
 
 function resetLevel() {
   player = makePlayer();
-  enemies = makeEnemyDefs().map(d => Object.assign({ alive: true, animTick: 0 }, d));
+  enemies = makeEnemyDefs().map(d => Object.assign({
+    alive: true,
+    animTick: 0,
+    hitStun: 0,
+    hitstopTimer: 0,
+    flashTimer: 0,
+    kbVx: 0,
+    kbVy: 0,
+    hpBarTimer: 0,
+    deathLaunched: false,
+    deathTimer: 0,
+    spinAngle: 0,
+    hasBeenHitThisAttack: false
+  }, d));
   projectiles = [];
   shockwaves = [];
   boss = null;
   killCount = 0;
   cameraX = 0;
   birthdayPlayed = false;
+  InputBuffer.clear();
 }
 
 // ═══════════════════════════════════════════════════════════
-// 8. 碰撞工具
+// 9. 碰撞工具
 // ═══════════════════════════════════════════════════════════
 function aabb(ax, ay, aw, ah, bx, by, bw, bh) {
   return ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
@@ -455,34 +846,119 @@ function platformLand(p) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// 9. 更新邏輯
-// ═══════════════════════════════════════════════════════════
-
 function updatePlayer() {
   const p = player;
-  // 移動
-  let moving = false;
-  if (keys['ArrowLeft'] || keys['a']) {
-    p.vx = -MOVE_SPEED; p.facing = -1; moving = true;
-  } else if (keys['ArrowRight'] || keys['d']) {
-    p.vx = MOVE_SPEED; p.facing = 1; moving = true;
-  } else {
-    p.vx = 0;
-  }
+  // 移動與加速度計算
+  let moveInput = 0;
+  if (keys['ArrowLeft'] || keys['a']) moveInput -= 1;
+  if (keys['ArrowRight'] || keys['d']) moveInput += 1;
 
-  // 跳躍
-  if ((justPressed['ArrowUp'] || justPressed['w']) && p.onGround) {
+  const currentAccel = p.onGround ? ACCEL : AIR_ACCEL;
+  const currentDecel = p.onGround ? DECEL : AIR_DECEL;
+
+  if (moveInput !== 0) {
+    p.facing = moveInput > 0 ? 1 : -1;
+    // 轉向煞車加成
+    if ((moveInput > 0 && p.vx < 0) || (moveInput < 0 && p.vx > 0)) {
+      p.vx += moveInput * (currentAccel + TURN_BOOST);
+    } else {
+      p.vx += moveInput * currentAccel;
+    }
+    // 限制最大速度
+    if (Math.abs(p.vx) > MAX_SPEED) {
+      p.vx = Math.sign(p.vx) * MAX_SPEED;
+    }
+  } else {
+    // 鬆開按鍵時摩擦減速滑行
+    if (Math.abs(p.vx) <= currentDecel) {
+      p.vx = 0;
+    } else {
+      p.vx -= Math.sign(p.vx) * currentDecel;
+    }
+  }
+  const moving = Math.abs(p.vx) > 0.25;
+
+  // ══════════════════════════════════════════
+  // 動態輸入快取檢測 (Input Buffer)
+  // ══════════════════════════════════════════
+  const wantsJump = justPressed['ArrowUp'] || justPressed['w'] || InputBuffer.has('jump');
+  const wantsAttack = justPressed['Space'] || InputBuffer.has('attack');
+  const isHoldingUp = keys['ArrowUp'] || keys['w'];
+
+  // 1. 跳躍取消 (Jump Cancel) 機制：
+  // 招式命中判定成功後，可在後搖期間立刻透過跳躍取消，進入空中連擊追擊 (Air Combo)！
+  if (p.attackFrames > 0 && p.attackHasHit && p.jumpCancelable && wantsJump && p.onGround) {
+    p.attackFrames = 0;
+    p.attackCooldown = 0;
+    p.attackMove = null;
     p.vy = JUMP_V;
     p.onGround = false;
+    InputBuffer.consume('jump');
+    SFX.jump();
+    SFX.cancel();
+    VFXManager.spawnJumpCancelDust(p.x + PLAYER_HIT_W / 2, p.y + PLAYER_HIT_H);
+  } else if (p.onGround && wantsJump && p.attackFrames <= 0) {
+    p.vy = JUMP_V;
+    p.onGround = false;
+    InputBuffer.consume('jump');
     SFX.jump();
   }
 
-  // 攻擊
-  if (justPressed['Space'] && p.attackCooldown <= 0) {
-    p.attackFrames = ATTACK_ACTIVE;
-    p.attackCooldown = ATTACK_COOLDOWN;
+  // 2. 攻擊判定與連招取消 (Combo Cancel)
+  const canNormalAttack = p.attackFrames <= 0 && p.attackCooldown <= 0;
+  const canComboCancel = p.attackFrames > 0 && p.attackHasHit && p.canComboCancel;
+
+  if (wantsAttack && (canNormalAttack || canComboCancel)) {
+    InputBuffer.consume('attack');
+
+    let chosenMove = null;
+    if (!p.onGround) {
+      // 空中撲咬 (Air Juggle Bite)：給予向上滯空懸浮力，維持空中連段
+      chosenMove = ATTACK_TYPES.AERIAL;
+      p.vy = Math.min(p.vy, -2.8);
+    } else if (isHoldingUp || p.comboStage === 2) {
+      // 上勾拳/升龍撲咬 (Uppercut Launcher)：強烈向上 Y 軸浮空
+      chosenMove = ATTACK_TYPES.UPPERCUT;
+      p.comboStage = 0;
+      p.comboTimer = 0;
+      p.vx = p.facing * 2.2;
+    } else if (p.comboStage === 1) {
+      // 連招二段咬
+      chosenMove = ATTACK_TYPES.MEDIUM;
+      p.comboStage = 2;
+      p.comboTimer = 26;
+      p.vx = p.facing * 1.8;
+    } else {
+      // 連招初段輕咬
+      chosenMove = ATTACK_TYPES.LIGHT;
+      p.comboStage = 1;
+      p.comboTimer = 24;
+      p.vx = p.facing * 1.2;
+    }
+
+    p.attackMove = chosenMove;
+    p.attackFrames = chosenMove.activeFrames;
+    p.attackCooldown = chosenMove.recoveryFrames;
+    p.attackHasHit = false;
+    p.jumpCancelable = false;
+    p.canComboCancel = false;
+
+    // 重置所有敵人的受擊標記，確保新的一擊能命中
+    for (const e of enemies) e.hasBeenHitThisAttack = false;
+
     SFX.bite();
   }
+
+  // 連招間隔與計數器逾時重置
+  if (p.comboTimer > 0) {
+    p.comboTimer--;
+    if (p.comboTimer <= 0) p.comboStage = 0;
+  }
+  if (p.comboResetTimer > 0) {
+    p.comboResetTimer--;
+    if (p.comboResetTimer <= 0) p.comboCount = 0;
+  }
+
   if (p.attackFrames > 0) p.attackFrames--;
   if (p.attackCooldown > 0) p.attackCooldown--;
   if (p.hurtFrames > 0) p.hurtFrames--;
@@ -533,6 +1009,7 @@ function hurtPlayer() {
   p.hearts--;
   p.hurtFrames = HURT_IFRAMES;
   SFX.hurt();
+  CameraShake.shake(4.5);
   if (p.hearts <= 0) {
     state = 'LOSE';
     document.getElementById('restartBtn').style.display = 'block';
@@ -542,6 +1019,70 @@ function hurtPlayer() {
 function updateEnemies() {
   for (const e of enemies) {
     if (!e.alive) continue;
+
+    // 1. 致命擊殺死亡飛出物理 (Death Launch Physics)
+    if (e.deathLaunched) {
+      e.x += e.kbVx;
+      e.y += e.kbVy;
+      e.kbVy += GRAVITY * 0.7;
+      e.spinAngle += 0.35 * (e.kbVx >= 0 ? 1 : -1);
+      e.deathTimer--;
+      if (e.deathTimer <= 0 || e.y > H + 50) {
+        e.alive = false;
+        killCount++;
+        SFX.kill();
+        CameraShake.shake(6);
+        // 死亡煙火粒子
+        for (let i = 0; i < 16; i++) {
+          VFXManager.particles.push({
+            x: e.x + e.w / 2,
+            y: e.y + e.h / 2,
+            vx: (Math.random() - 0.5) * 9,
+            vy: (Math.random() - 0.7) * 9,
+            life: 20 + Math.random() * 10,
+            maxLife: 30,
+            size: 3 + Math.random() * 3,
+            color: ['#ff4444', '#ffbb00', '#ffffff'][i % 3]
+          });
+        }
+      }
+      continue;
+    }
+
+    // 2. 敵人自身的打擊停頓 (Hitstop Freeze)
+    if (e.hitstopTimer > 0) {
+      e.hitstopTimer--;
+      continue; // 停頓中暫停位移與動畫更新
+    }
+
+    // 3. 受擊硬直 (HitStun) 與擊飛物理 (Knockback & Air Juggle Physics)
+    if (e.hitStun > 0) {
+      e.hitStun--;
+      if (e.flashTimer > 0) e.flashTimer--;
+      if (e.hpBarTimer > 0) e.hpBarTimer--;
+
+      // 方向性衝量位移
+      e.x += e.kbVx;
+      e.y += e.kbVy;
+      e.kbVx *= 0.88;           // 水平阻力衰減
+      e.kbVy += GRAVITY * 0.65;  // 空中受擊浮空重力
+
+      // 落地邊界
+      if (e.y >= e.baseY) {
+        e.y = e.baseY;
+        if (e.kbVy > 3) {
+          e.kbVy = -e.kbVy * 0.3; // 落地輕微回彈
+        } else {
+          e.kbVy = 0;
+        }
+      }
+      // 處於 HitStun 硬直時，無法移動也無法對玩家造成碰撞傷害
+      continue;
+    }
+
+    if (e.hpBarTimer > 0) e.hpBarTimer--;
+
+    // 4. 正常敵人 AI 行為
     if (e.type === 'slipper') {
       e.x += e.speed * e.dir;
       if (e.x < e.range[0]) { e.x = e.range[0]; e.dir = 1; }
@@ -559,19 +1100,83 @@ function updateEnemies() {
       if (e.y >= e.baseY) { e.y = e.baseY; e.vy = -9.2; }
     }
 
-    // 檢查玩家撲咬攻擊
-    if (player.attackFrames > 0) {
-      const hitX = player.facing === 1 ? player.x + PLAYER_HIT_W : player.x - ATTACK_W;
-      const hitY = player.y + 4;
-      if (aabb(hitX, hitY, ATTACK_W, ATTACK_H, e.x, e.y, e.w, e.h)) {
-        e.alive = false;
-        killCount++;
-        SFX.kill();
+    // 5. 檢測玩家 AttackBox 與 敵人 HurtBox 碰撞
+    if (player.attackFrames > 0 && player.attackMove && !e.hasBeenHitThisAttack) {
+      const move = player.attackMove;
+      let atkX = player.facing === 1 ? player.x + PLAYER_HIT_W - 8 : player.x - ATTACK_W + 8;
+      let atkY = player.y + 4;
+      let atkW = ATTACK_W;
+      let atkH = ATTACK_H;
+
+      if (move.id === 'uppercut') {
+        atkY = player.y - 18;
+        atkH = ATTACK_H + 24;
+        atkW = ATTACK_W + 12;
+      }
+
+      const attackBox = new Hitbox(atkX, atkY, atkW, atkH);
+      const hurtBox = new Hitbox(e.x, e.y, e.w, e.h);
+
+      if (Hitbox.checkOverlap(attackBox, hurtBox)) {
+        e.hasBeenHitThisAttack = true;
+        player.attackHasHit = true;
+        player.jumpCancelable = move.canJumpCancelOnHit;
+        player.canComboCancel = true;
+
+        // 計算重疊幾何中心點 (Contact Point)
+        const contact = Hitbox.getContactPoint(attackBox, hurtBox);
+
+        // 扣除敵人血量
+        e.hp -= move.damage;
+        e.hpBarTimer = 110;
+
+        // 連擊統計
+        player.comboCount = (player.comboCount || 0) + 1;
+        player.comboResetTimer = 75;
+
+        const isKill = e.hp <= 0;
+
+        // 5.1 打擊停頓 (Hitstop / Frame Freeze: 4-7 幀)
+        const hitstopFrames = isKill ? move.hitstop + 2 : move.hitstop;
+        Hitstop.trigger(hitstopFrames);
+        e.hitstopTimer = hitstopFrames;
+
+        // 5.2 鏡頭震動 (Camera Shake)
+        CameraShake.shake(isKill ? move.shake + 2.5 : move.shake);
+
+        // 5.3 受擊僵直與方向性衝量向量 (Knockback Vector)
+        e.flashTimer = hitstopFrames + 5;
+        if (isKill) {
+          e.deathLaunched = true;
+          e.deathTimer = 32;
+          e.kbVx = player.facing * (move.kbX * 1.8 + 2.2);
+          e.kbVy = Math.min(-7.5, move.kbY - 2.5);
+        } else {
+          e.hitStun = move.hitStun;
+          e.kbVx = player.facing * move.kbX;
+          e.kbVy = move.kbY;
+        }
+
+        // 5.4 音效播放
+        if (SFX[move.sfx]) SFX[move.sfx]();
+
+        // 5.5 觸發打擊特效 Hook
+        VFXManager.emitHit({
+          contactX: contact.x,
+          contactY: contact.y,
+          attacker: player,
+          defender: e,
+          move: move,
+          isHeavy: move.id === 'uppercut',
+          isKill: isKill,
+          facing: player.facing,
+          comboCount: player.comboCount
+        });
       }
     }
 
-    // 玩家碰撞傷害
-    if (aabb(player.x, player.y, PLAYER_HIT_W, PLAYER_HIT_H, e.x, e.y, e.w, e.h)) {
+    // 6. 敵人對玩家的接觸傷害（僅在非受擊與未死亡狀態下）
+    if (!e.deathLaunched && e.hitStun <= 0 && aabb(player.x, player.y, PLAYER_HIT_W, PLAYER_HIT_H, e.x, e.y, e.w, e.h)) {
       hurtPlayer();
     }
   }
@@ -587,14 +1192,48 @@ function updateBoss() {
     hurtPlayer();
   }
 
-  // Boss 被咬
-  if (player.attackFrames > 0 && b.hitCooldown <= 0) {
-    const hitX = player.facing === 1 ? player.x + PLAYER_HIT_W : player.x - ATTACK_W;
-    const hitY = player.y + 4;
-    if (aabb(hitX, hitY, ATTACK_W, ATTACK_H, b.x, b.y, b.w, b.h)) {
+  // Boss 被咬打擊判定
+  if (player.attackFrames > 0 && player.attackMove && b.hitCooldown <= 0) {
+    const move = player.attackMove;
+    let atkX = player.facing === 1 ? player.x + PLAYER_HIT_W - 8 : player.x - ATTACK_W + 8;
+    let atkY = player.y + 4;
+    let atkW = ATTACK_W;
+    let atkH = ATTACK_H;
+    if (move.id === 'uppercut') { atkY = player.y - 18; atkH = ATTACK_H + 24; atkW = ATTACK_W + 12; }
+
+    const attackBox = new Hitbox(atkX, atkY, atkW, atkH);
+    const hurtBox = new Hitbox(b.x, b.y, b.w, b.h);
+
+    if (Hitbox.checkOverlap(attackBox, hurtBox)) {
+      player.attackHasHit = true;
+      player.jumpCancelable = true;
+      player.canComboCancel = true;
+      player.comboCount = (player.comboCount || 0) + 1;
+      player.comboResetTimer = 75;
+
       b.hp--;
-      b.hitCooldown = 34;
+      b.hitCooldown = 32;
+      b.flashTimer = 8;
+
+      const contact = Hitbox.getContactPoint(attackBox, hurtBox);
+      const isKill = b.hp <= 0;
+
+      Hitstop.trigger(isKill ? 12 : 6);
+      CameraShake.shake(isKill ? 8.0 : 5.0);
       SFX.bosshit();
+
+      VFXManager.emitHit({
+        contactX: contact.x,
+        contactY: contact.y,
+        attacker: player,
+        defender: b,
+        move: move,
+        isHeavy: true,
+        isKill: isKill,
+        facing: player.facing,
+        comboCount: player.comboCount
+      });
+
       if (b.hp <= 0) {
         b.phase = 'dead';
         b.timer = 90;
@@ -785,10 +1424,42 @@ function renderEnemies() {
   for (const e of enemies) {
     if (!e.alive) continue;
     const sx = e.x - cameraX;
-    if (sx > W + 50 || sx + e.w < -50) continue;
+    if (sx > W + 60 || sx + e.w < -60) continue;
     const img = assets[e.type];
     const flipX = e.dir ? e.dir < 0 : false;
-    drawImg(img, sx, e.y, e.w, e.h, flipX);
+
+    ctx.save();
+    // 死亡飛出旋轉 (Death Launch)
+    if (e.deathLaunched) {
+      ctx.translate(sx + e.w / 2, e.y + e.h / 2);
+      ctx.rotate(e.spinAngle);
+      drawImg(img, -e.w / 2, -e.h / 2, e.w, e.h, false);
+    } else {
+      // 受擊微抖動 (Hitstop Vibration)
+      let shakeX = 0, shakeY = 0;
+      if (e.hitstopTimer > 0) {
+        shakeX = (Math.random() - 0.5) * 5;
+        shakeY = (Math.random() - 0.5) * 5;
+      }
+      // 受擊閃爍 (Hit Flash Effect)
+      if (e.flashTimer > 0) {
+        ctx.filter = 'brightness(2.8) saturate(0.2)';
+      }
+      drawImg(img, sx + shakeX, e.y + shakeY, e.w, e.h, flipX);
+    }
+    ctx.restore();
+
+    // 敵人頭頂血條 (受擊時顯示)
+    if (e.hpBarTimer > 0 && e.maxHp > 1 && !e.deathLaunched) {
+      const barW = 34, barH = 5;
+      const barX = sx + (e.w - barW) / 2;
+      const barY = e.y - 12;
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+      const fillW = Math.max(0, (e.hp / e.maxHp) * barW);
+      ctx.fillStyle = e.hp > 1 ? '#4cd964' : '#ff3b30';
+      ctx.fillRect(barX, barY, fillW, barH);
+    }
   }
 }
 
@@ -808,9 +1479,6 @@ function renderPlayer() {
   drawSprite(img, frame, px, py, PLAYER_DRAW_W, PLAYER_DRAW_H, p.facing < 0);
 
   ctx.globalAlpha = 1;
-
-  // 攻擊 hitbox 視覺提示（僅除錯用，正式不顯示）
-  // if (p.attackFrames > 0) { ctx.strokeStyle = 'red'; ctx.strokeRect(...); }
 }
 
 function renderBossCreature() {
@@ -829,7 +1497,13 @@ function renderBossCreature() {
   // dead 下沉
   const deadSink = b.phase === 'dead' ? Math.min((90 - b.timer) * 0.5, 30) : 0;
 
+  ctx.save();
+  if (b.flashTimer > 0) {
+    b.flashTimer--;
+    ctx.filter = 'brightness(2.6)';
+  }
   drawImg(img, bx + shake, by + deadSink, bw, bh, b.facing < 0);
+  ctx.restore();
 
   // Boss 彈幕
   for (const p of projectiles) {
@@ -855,6 +1529,21 @@ function renderHUD() {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 13px Noto Sans TC, sans-serif';
     ctx.fillText(`擊倒: ${killCount}`, 18, 56);
+  }
+  // 連擊數顯示 (Juicy Combo Counter)
+  if (p && p.comboCount >= 2) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '900 24px "Arial Black", sans-serif';
+    ctx.fillStyle = '#ffcc00';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    ctx.shadowColor = 'rgba(255, 120, 0, 0.9)';
+    ctx.shadowBlur = 12;
+    const txt = `${p.comboCount} HITS!`;
+    ctx.strokeText(txt, W / 2, 64);
+    ctx.fillText(txt, W / 2, 64);
+    ctx.restore();
   }
   // 目標提示
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -910,7 +1599,7 @@ function renderStoryScene(scene) {
     drawImg(assets['decor_snack'], 295, midY + 50, 36, 36);
     // Soju idle
     const sp = SOJU_FRAMES.idle;
-    const f = sp.frames[Math.floor(storyTick / sp.dur) % 4];
+    const f = sp.frames[Math.floor(storyTick / sp.dur) % sp.frames.length];
     drawSprite(assets['idle'], f, 370, midY + 30, 90, 80);
   } else if (scene === 1) {
     drawSprite(assets['owner'], OWNER_FRAME, 150, midY - 90, 80, 200);
@@ -944,8 +1633,9 @@ function renderTitle() {
   }
 
   // Soju 大圖
-  const t = Math.floor(titleTick / 14) % 4;
-  const f = SOJU_FRAMES.idle.frames[t];
+  const sp = SOJU_FRAMES.idle;
+  const t = Math.floor(titleTick / sp.dur) % sp.frames.length;
+  const f = sp.frames[t];
   drawSprite(assets['idle'], f, W / 2 - 80, 120, 160, 140);
 
   // 標題文字
@@ -999,6 +1689,7 @@ function renderLevel() {
   renderPit();
   renderEnemies();
   renderPlayer();
+  VFXManager.render(ctx, cameraX);
   renderHUD();
 }
 
@@ -1012,7 +1703,8 @@ function renderBossIntro() {
   drawImg(bImg, W / 2 - bw / 2, H / 2 - bh / 2 - 20, bw, bh);
 
   // 玩家
-  const f = SOJU_FRAMES.idle.frames[Math.floor(bossIntroTimer / 14) % 4];
+  const sp = SOJU_FRAMES.idle;
+  const f = sp.frames[Math.floor(bossIntroTimer / sp.dur) % sp.frames.length];
   drawSprite(assets['idle'], f, 60, GROUND_Y - PLAYER_DRAW_H, PLAYER_DRAW_W, PLAYER_DRAW_H, false);
 
   // 字幕
@@ -1046,6 +1738,7 @@ function renderBossRoom() {
 
   renderBossCreature();
   renderPlayer();
+  VFXManager.render(ctx, 0);
   renderBossHUD();
   renderHUD();
 }
@@ -1057,7 +1750,8 @@ function renderWin() {
 
   // 主人 + Soju 相聚
   drawSprite(assets['owner'], OWNER_FRAME, W/2 - 120, H/2 - 130, 80, 200);
-  const f = SOJU_FRAMES.idle.frames[Math.floor(winTick / 14) % 4];
+  const sp = SOJU_FRAMES.idle;
+  const f = sp.frames[Math.floor(winTick / sp.dur) % sp.frames.length];
   drawSprite(assets['idle'], f, W/2 - 20, H/2 + 10, 110, 96);
 
   // 愛心裝飾
@@ -1114,6 +1808,19 @@ let accum = 0;
 const STEP = 1000 / 60;
 
 function update() {
+  // 打擊停頓 (Hitstop Freeze)：處於停頓時暫停世界位移與動畫更新，但震動與輸入快取保持運作
+  if (Hitstop.update()) {
+    CameraShake.update();
+    VFXManager.update();
+    InputBuffer.cleanup();
+    clearJustPressed();
+    return;
+  }
+
+  CameraShake.update();
+  VFXManager.update();
+  InputBuffer.cleanup();
+
   if (state === 'TITLE') {
     if (justPressed['Space']) { state = 'STORY'; storyScene = 0; storyTick = 0; }
   } else if (state === 'STORY') {
@@ -1136,6 +1843,11 @@ function update() {
 function render() {
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  // 鏡頭震動位移偏移 (Camera Shake)
+  if (state === 'LEVEL' || state === 'BOSS') {
+    ctx.translate(Math.round(CameraShake.offsetX), Math.round(CameraShake.offsetY));
+  }
   if (state === 'TITLE') renderTitle();
   else if (state === 'STORY') renderStory();
   else if (state === 'LEVEL') renderLevel();
@@ -1143,6 +1855,7 @@ function render() {
   else if (state === 'BOSS') renderBossRoom();
   else if (state === 'WIN') renderWin();
   else if (state === 'LOSE') renderLose();
+  ctx.restore();
 }
 
 function gameLoop(ts) {
