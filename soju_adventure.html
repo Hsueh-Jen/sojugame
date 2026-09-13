@@ -133,6 +133,23 @@ const SOJU_FRAMES = {
     { sx: 40,  sy: 555, sw: 460, sh: 365 },
     { sx: 560, sy: 555, sw: 460, sh: 365 },
   ]},
+  attack_punch: { dur: 4, frames: [
+    { sx: 0,   sy: 0, sw: 301, sh: 235 },
+    { sx: 301, sy: 0, sw: 301, sh: 235 },
+    { sx: 602, sy: 0, sw: 301, sh: 235 },
+  ]},
+  attack_head: { dur: 4, frames: [
+    { sx: 0,    sy: 0, sw: 577, sh: 448 },
+    { sx: 577,  sy: 0, sw: 577, sh: 448 },
+    { sx: 1154, sy: 0, sw: 577, sh: 448 },
+  ]},
+  attack_kick: { dur: 3, frames: [
+    { sx: 0,    sy: 0, sw: 536, sh: 384 },
+    { sx: 536,  sy: 0, sw: 536, sh: 384 },
+    { sx: 1072, sy: 0, sw: 536, sh: 384 },
+    { sx: 1608, sy: 0, sw: 536, sh: 384 },
+    { sx: 2144, sy: 0, sw: 536, sh: 384 },
+  ]},
   bite: { dur: 4, frames: [
     { sx: 40,  sy: 125, sw: 460, sh: 365 },
     { sx: 560, sy: 125, sw: 460, sh: 365 },
@@ -147,7 +164,7 @@ const OWNER_FRAME = { sx: 410, sy: 30, sw: 280, sh: 890 };
 // ═══════════════════════════════════════════════════════════
 const assets = {};
 let assetsLoaded = 0;
-const TOTAL_ASSETS = 24;
+const TOTAL_ASSETS = 27;
 
 function updateLoadingBar() {
   assetsLoaded++;
@@ -175,7 +192,7 @@ function loadWithChromaKey(name, src, targetBg, tol = 26) {
       const px = d.data;
       for (let i = 0; i < px.length; i += 4) {
         const r = px[i], g = px[i+1], b = px[i+2];
-        const isGray = Math.abs(r-g) <= 14 && Math.abs(g-b) <= 14;
+        const isGray = Math.abs(r-g) <= 16 && Math.abs(g-b) <= 16;
         const matchBg = Math.abs(r-targetBg[0]) <= tol && Math.abs(g-targetBg[1]) <= tol && Math.abs(b-targetBg[2]) <= tol;
         if (isGray && matchBg) px[i+3] = 0;
       }
@@ -191,11 +208,14 @@ function loadWithChromaKey(name, src, targetBg, tol = 26) {
 
 async function loadAllAssets() {
   await Promise.all([
-    loadWithChromaKey('idle',  'imgs/idle.jpeg',  [135,135,135]),
-    loadWithChromaKey('run',   'imgs/run.jpeg',   [133,133,133]),
-    loadWithChromaKey('jump',  'imgs/jump.jpeg',  [129,129,129]),
-    loadWithChromaKey('bite',  'imgs/bite.jpeg',  [124,124,124]),
-    loadWithChromaKey('owner', 'imgs/owner.jpeg', [123,123,123]),
+    loadWithChromaKey('idle',         'imgs/idle.jpeg',         [135,135,135]),
+    loadWithChromaKey('run',          'imgs/run.jpeg',          [133,133,133]),
+    loadWithChromaKey('jump',         'imgs/jump.jpeg',         [129,129,129]),
+    loadWithChromaKey('bite',         'imgs/bite.jpeg',         [124,124,124]),
+    loadWithChromaKey('attack_punch', 'imgs/attack_punch.jpg',  [119,119,119], 32),
+    loadWithChromaKey('attack_head',  'imgs/attack_head.jpg',   [116,116,116], 32),
+    loadWithChromaKey('attack_kick',  'imgs/attack_kick.jpeg',  [163,163,161], 32),
+    loadWithChromaKey('owner',        'imgs/owner.jpeg',        [123,123,123]),
     loadImage('slipper',       'imgs/slipper.png'),
     loadImage('dyson',         'imgs/dyson.png'),
     loadImage('ball',          'imgs/ball.png'),
@@ -346,15 +366,15 @@ const DECOR_DEFS = [
 
 function makeEnemyDefs() {
   return [
-    { type:'slipper', x:120,  y:GROUND_Y-32, w:48, h:32, dir:1, range:[100, 300],  speed:1.3, pause:0, baseY:GROUND_Y-32, hp:3, maxHp:3 },
-    { type:'slipper', x:300,  y:390-32,      w:48, h:32, dir:1, range:[250, 405],  speed:1.3, pause:0, baseY:390-32,      hp:3, maxHp:3 },
-    { type:'dyson',   x:600,  y:GROUND_Y-66, w:44, h:66, dir:1, range:[560, 820],  speed:3.9, pause:0, baseY:GROUND_Y-66, hp:4, maxHp:4 },
-    { type:'ball',    x:1150, y:GROUND_Y-32, w:32, h:32, vy:0,                              baseY:GROUND_Y-32,      hp:2, maxHp:2 },
-    { type:'slipper', x:1380, y:395-32,      w:48, h:32, dir:1, range:[1360,1485], speed:1.3, pause:0, baseY:395-32,      hp:3, maxHp:3 },
-    { type:'dyson',   x:1700, y:GROUND_Y-66, w:44, h:66, dir:1, range:[1650,1950], speed:3.9, pause:0, baseY:GROUND_Y-66, hp:4, maxHp:4 },
-    { type:'ball',    x:2050, y:GROUND_Y-32, w:32, h:32, vy:0,                              baseY:GROUND_Y-32,      hp:2, maxHp:2 },
-    { type:'slipper', x:2200, y:GROUND_Y-32, w:48, h:32, dir:1, range:[2150,2350], speed:1.3, pause:0, baseY:GROUND_Y-32, hp:3, maxHp:3 },
-    { type:'slipper', x:2950, y:GROUND_Y-32, w:48, h:32, dir:1, range:[2900,3060], speed:1.3, pause:0, baseY:GROUND_Y-32, hp:3, maxHp:3 },
+    { type:'slipper', x:120,  y:GROUND_Y-58, w:88, h:58, dir:1, range:[100, 320],  speed:1.3, pause:0, baseY:GROUND_Y-58, hp:3, maxHp:3 },
+    { type:'slipper', x:300,  y:390-58,      w:88, h:58, dir:1, range:[235, 410],  speed:1.3, pause:0, baseY:390-58,      hp:3, maxHp:3 },
+    { type:'dyson',   x:600,  y:GROUND_Y-88, w:68, h:88, dir:1, range:[560, 840],  speed:3.9, pause:0, baseY:GROUND_Y-88, hp:4, maxHp:4 },
+    { type:'ball',    x:1150, y:GROUND_Y-60, w:60, h:60, vy:0,                              baseY:GROUND_Y-60,      hp:2, maxHp:2 },
+    { type:'slipper', x:1380, y:395-58,      w:88, h:58, dir:1, range:[1355,1490], speed:1.3, pause:0, baseY:395-58,      hp:3, maxHp:3 },
+    { type:'dyson',   x:1700, y:GROUND_Y-88, w:68, h:88, dir:1, range:[1650,1950], speed:3.9, pause:0, baseY:GROUND_Y-88, hp:4, maxHp:4 },
+    { type:'ball',    x:2050, y:GROUND_Y-60, w:60, h:60, vy:0,                              baseY:GROUND_Y-60,      hp:2, maxHp:2 },
+    { type:'slipper', x:2200, y:GROUND_Y-58, w:88, h:58, dir:1, range:[2150,2380], speed:1.3, pause:0, baseY:GROUND_Y-58, hp:3, maxHp:3 },
+    { type:'slipper', x:2950, y:GROUND_Y-58, w:88, h:58, dir:1, range:[2880,3070], speed:1.3, pause:0, baseY:GROUND_Y-58, hp:3, maxHp:3 },
   ];
 }
 
@@ -461,65 +481,73 @@ const InputBuffer = {
   }
 };
 
-// 6.5 招式定義庫 (Attack Definitions, Knockback Vectors & Cancels)
+// 6.5 招式定義庫 (Punch, Headbutt, Kick & Air Kick)
 const ATTACK_TYPES = {
-  LIGHT: {
-    id: 'light',
-    name: '輕咬 (Light Snapping)',
-    activeFrames: 8,
+  PUNCH: {
+    id: 'punch',
+    name: '用手揍 (Punch)',
+    anim: 'attack_punch',
+    activeFrames: 12,
     recoveryFrames: 11,
     hitstop: 4,               // 4 幀停頓 (~66ms)
-    shake: 1.8,               // 1.8px 輕震
+    shake: 2.0,               // 2px 輕微震動
     damage: 1,
-    kbX: 3.2,                 // 小幅後退
-    kbY: -1.6,
-    hitStun: 18,
+    kbX: 3.5,                 // 輕度後退
+    kbY: -1.8,
+    hitStun: 20,
     canJumpCancelOnHit: false,
     sfx: 'hitLight'
   },
-  MEDIUM: {
-    id: 'medium',
-    name: '二段咬 (Double Bite)',
-    activeFrames: 9,
+  HEAD: {
+    id: 'head',
+    name: '用頭頂 (Headbutt)',
+    anim: 'attack_head',
+    activeFrames: 12,
     recoveryFrames: 13,
     hitstop: 5,               // 5 幀停頓
-    shake: 3.2,               // 3.2px 中等震動
+    shake: 3.6,               // 3.6px 中等震動
     damage: 1,
-    kbX: 4.5,
-    kbY: -2.4,
-    hitStun: 22,
+    kbX: 5.0,                 // 中度擊退
+    kbY: -2.8,
+    hitStun: 24,
     canJumpCancelOnHit: false,
     sfx: 'hitLight'
   },
-  UPPERCUT: {
-    id: 'uppercut',
-    name: '升龍上勾咬 (Launcher)',
-    activeFrames: 12,
-    recoveryFrames: 16,
-    hitstop: 7,               // 7 幀沉重卡頓 (~116ms)
-    shake: 6.5,               // 6.5px 強烈震動
-    damage: 2,
-    kbX: 2.0,                 // 浮空向上！
-    kbY: -11.2,               // 給予強大 Y 軸擊飛衝量，進入空中連擊！
-    hitStun: 44,
-    canJumpCancelOnHit: true, // 核心：命中後可立即跳躍取消 (Jump Cancel)！
-    sfx: 'launch'
+  KICK: {
+    id: 'kick',
+    name: '迴旋踢 (Spin Kick)',
+    anim: 'attack_kick',
+    activeFrames: 15,
+    recoveryFrames: 18,
+    hitstop: 8,               // 8 幀沉重卡頓 (~133ms)
+    shake: 7.0,               // 7px 強烈震動
+    damage: 2.5,
+    kbX: 11.5,                // ★ 在踢的時候，敵人會飛比較遠！
+    kbY: -6.8,                // 遠距離拋物線擊飛！
+    hitStun: 50,
+    canJumpCancelOnHit: true, // 核心：踢擊命中後可立即跳躍取消 (Jump Cancel)！
+    sfx: 'hitHeavy'
   },
   AERIAL: {
     id: 'aerial',
-    name: '空中追擊撲咬 (Air Juggle Bite)',
-    activeFrames: 9,
-    recoveryFrames: 12,
-    hitstop: 5,               // 5 幀空中停頓
-    shake: 3.8,
-    damage: 1.5,
-    kbX: 3.6,
-    kbY: -4.6,                // 維持敵人空中浮空高度 (Air Juggle Physics)
-    hitStun: 26,
+    name: '空中飛踢 (Aerial Kick)',
+    anim: 'attack_kick',
+    activeFrames: 15,
+    recoveryFrames: 13,
+    hitstop: 6,               // 6 幀空中停頓
+    shake: 4.8,
+    damage: 2.0,
+    kbX: 8.5,                 // 空中飛踢擊退遠
+    kbY: -4.8,
+    hitStun: 32,
     canJumpCancelOnHit: false,
     sfx: 'airHit'
   }
 };
+// 兼容性別名
+ATTACK_TYPES.LIGHT = ATTACK_TYPES.PUNCH;
+ATTACK_TYPES.MEDIUM = ATTACK_TYPES.HEAD;
+ATTACK_TYPES.UPPERCUT = ATTACK_TYPES.KICK;
 
 // 6.6 視覺特效與打擊點 Hook 系統 (VFX Spawn Hooks)
 const VFXManager = {
@@ -811,7 +839,12 @@ function resetLevel() {
     deathLaunched: false,
     deathTimer: 0,
     spinAngle: 0,
-    hasBeenHitThisAttack: false
+    hasBeenHitThisAttack: false,
+    attackCooldown: 30 + Math.floor(Math.random() * 40),
+    attackPhase: 'none',
+    attackTimer: 0,
+    isAttacking: false,
+    vx: 0,
   }, d));
   projectiles = [];
   shockwaves = [];
@@ -904,7 +937,7 @@ function updatePlayer() {
     SFX.jump();
   }
 
-  // 2. 攻擊判定與連招取消 (Combo Cancel)
+  // 2. 攻擊判定與連招取消 (Combo Cancel: 用手揍 -> 用頭頂 -> 迴旋踢)
   const canNormalAttack = p.attackFrames <= 0 && p.attackCooldown <= 0;
   const canComboCancel = p.attackFrames > 0 && p.attackHasHit && p.canComboCancel;
 
@@ -913,27 +946,27 @@ function updatePlayer() {
 
     let chosenMove = null;
     if (!p.onGround) {
-      // 空中撲咬 (Air Juggle Bite)：給予向上滯空懸浮力，維持空中連段
+      // 空中飛踢 (Aerial Kick)：給予向上滯空懸浮力，維持空中連段
       chosenMove = ATTACK_TYPES.AERIAL;
       p.vy = Math.min(p.vy, -2.8);
-    } else if (isHoldingUp || p.comboStage === 2) {
-      // 上勾拳/升龍撲咬 (Uppercut Launcher)：強烈向上 Y 軸浮空
-      chosenMove = ATTACK_TYPES.UPPERCUT;
+    } else if (p.comboStage === 2 || isHoldingUp) {
+      // 第三擊（或按住上）：迴旋踢 (Spin Kick) - 敵人會飛比較遠！
+      chosenMove = ATTACK_TYPES.KICK;
       p.comboStage = 0;
       p.comboTimer = 0;
-      p.vx = p.facing * 2.2;
+      p.vx = p.facing * 3.2; // 迴旋踢向前大踏步衝刺
     } else if (p.comboStage === 1) {
-      // 連招二段咬
-      chosenMove = ATTACK_TYPES.MEDIUM;
+      // 第二擊：用頭頂 (Headbutt)
+      chosenMove = ATTACK_TYPES.HEAD;
       p.comboStage = 2;
-      p.comboTimer = 26;
-      p.vx = p.facing * 1.8;
+      p.comboTimer = 28;
+      p.vx = p.facing * 2.2; // 頭頂前頂位移
     } else {
-      // 連招初段輕咬
-      chosenMove = ATTACK_TYPES.LIGHT;
+      // 第一擊：用手揍 (Punch)
+      chosenMove = ATTACK_TYPES.PUNCH;
       p.comboStage = 1;
       p.comboTimer = 24;
-      p.vx = p.facing * 1.2;
+      p.vx = p.facing * 1.5; // 出拳向前踏步
     }
 
     p.attackMove = chosenMove;
@@ -942,11 +975,14 @@ function updatePlayer() {
     p.attackHasHit = false;
     p.jumpCancelable = false;
     p.canComboCancel = false;
+    p.anim = chosenMove.anim;
+    p.animTick = 0;
+    p.animFrame = 0;
 
     // 重置所有敵人的受擊標記，確保新的一擊能命中
     for (const e of enemies) e.hasBeenHitThisAttack = false;
 
-    SFX.bite();
+    if (SFX[chosenMove.sfx]) SFX[chosenMove.sfx]();
   }
 
   // 連招間隔與計數器逾時重置
@@ -993,12 +1029,12 @@ function updatePlayer() {
 
   // 動畫狀態
   let newAnim = 'idle';
-  if (p.attackFrames > 0) newAnim = 'bite';
+  if (p.attackFrames > 0 && p.attackMove) newAnim = p.attackMove.anim;
   else if (!p.onGround) newAnim = 'jump';
   else if (moving) newAnim = 'run';
 
   if (newAnim !== p.anim) { p.anim = newAnim; p.animTick = 0; p.animFrame = 0; }
-  const animDef = SOJU_FRAMES[p.anim];
+  const animDef = SOJU_FRAMES[p.anim] || SOJU_FRAMES.idle;
   p.animTick++;
   if (p.animTick >= animDef.dur) { p.animTick = 0; p.animFrame = (p.animFrame + 1) % animDef.frames.length; }
 }
@@ -1027,18 +1063,18 @@ function updateEnemies() {
       e.kbVy += GRAVITY * 0.7;
       e.spinAngle += 0.35 * (e.kbVx >= 0 ? 1 : -1);
       e.deathTimer--;
-      if (e.deathTimer <= 0 || e.y > H + 50) {
+      if (e.deathTimer <= 0 || e.y > H + 60) {
         e.alive = false;
         killCount++;
         SFX.kill();
         CameraShake.shake(6);
         // 死亡煙火粒子
-        for (let i = 0; i < 16; i++) {
+        for (let i = 0; i < 18; i++) {
           VFXManager.particles.push({
             x: e.x + e.w / 2,
             y: e.y + e.h / 2,
-            vx: (Math.random() - 0.5) * 9,
-            vy: (Math.random() - 0.7) * 9,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.7) * 10,
             life: 20 + Math.random() * 10,
             maxLife: 30,
             size: 3 + Math.random() * 3,
@@ -1060,11 +1096,13 @@ function updateEnemies() {
       e.hitStun--;
       if (e.flashTimer > 0) e.flashTimer--;
       if (e.hpBarTimer > 0) e.hpBarTimer--;
+      e.isAttacking = false;
+      e.attackPhase = 'none';
 
       // 方向性衝量位移
       e.x += e.kbVx;
       e.y += e.kbVy;
-      e.kbVx *= 0.88;           // 水平阻力衰減
+      e.kbVx *= 0.90;           // 水平阻力衰減
       e.kbVy += GRAVITY * 0.65;  // 空中受擊浮空重力
 
       // 落地邊界
@@ -1082,22 +1120,102 @@ function updateEnemies() {
 
     if (e.hpBarTimer > 0) e.hpBarTimer--;
 
-    // 4. 正常敵人 AI 行為
+    // 4. 敵人主動攻擊 AI 行為（冷卻、前搖預警、主動攻擊、收招）
+    if (e.attackCooldown > 0) e.attackCooldown--;
+
+    const distToPlayerX = (player.x + PLAYER_HIT_W / 2) - (e.x + e.w / 2);
+    const distToPlayerY = Math.abs((player.y + PLAYER_HIT_H / 2) - (e.y + e.h / 2));
+    const isPlayerNearby = Math.abs(distToPlayerX) < 160 && distToPlayerY < 75;
+
     if (e.type === 'slipper') {
-      e.x += e.speed * e.dir;
-      if (e.x < e.range[0]) { e.x = e.range[0]; e.dir = 1; }
-      if (e.x + e.w > e.range[1]) { e.x = e.range[1] - e.w; e.dir = -1; }
+      if (e.attackPhase === 'windup') {
+        // 前搖蓄力預備拍打
+        e.attackTimer--;
+        if (e.attackTimer <= 0) {
+          e.attackPhase = 'strike';
+          e.attackTimer = 18;
+          e.isAttacking = true; // 進入傷害判定幀！
+          e.vx = e.dir * 4.6;
+        }
+      } else if (e.attackPhase === 'strike') {
+        // 主動拍打撲擊中 (傷害判定開啟！)
+        e.x += e.vx;
+        e.attackTimer--;
+        if (e.attackTimer <= 0) {
+          e.attackPhase = 'recover';
+          e.attackTimer = 16;
+          e.isAttacking = false;
+          e.vx = 0;
+        }
+      } else if (e.attackPhase === 'recover') {
+        e.attackTimer--;
+        if (e.attackTimer <= 0) {
+          e.attackPhase = 'none';
+          e.attackCooldown = 70 + Math.floor(Math.random() * 30);
+        }
+      } else {
+        // 正常巡邏巡視（非攻擊狀態，碰到主角不造成傷害）
+        e.isAttacking = false;
+        if (isPlayerNearby && e.attackCooldown <= 0) {
+          e.dir = distToPlayerX > 0 ? 1 : -1;
+          e.attackPhase = 'windup';
+          e.attackTimer = 22;
+        } else {
+          e.x += e.speed * e.dir;
+          if (e.x < e.range[0]) { e.x = e.range[0]; e.dir = 1; }
+          if (e.x + e.w > e.range[1]) { e.x = e.range[1] - e.w; e.dir = -1; }
+        }
+      }
     } else if (e.type === 'dyson') {
-      if (e.pause > 0) { e.pause--; }
-      else {
-        e.x += e.speed * e.dir;
-        if (e.x < e.range[0]) { e.x = e.range[0]; e.dir = 1; e.pause = 26; }
-        if (e.x + e.w > e.range[1]) { e.x = e.range[1] - e.w; e.dir = -1; e.pause = 26; }
+      if (e.attackPhase === 'windup') {
+        // 渦輪狂轉蓄力
+        e.attackTimer--;
+        if (e.attackTimer <= 0) {
+          e.attackPhase = 'strike';
+          e.attackTimer = 22;
+          e.isAttacking = true; // 衝撞吸入攻擊判定開啟！
+          e.vx = e.dir * 6.0;
+        }
+      } else if (e.attackPhase === 'strike') {
+        e.x += e.vx;
+        e.attackTimer--;
+        if (e.attackTimer <= 0) {
+          e.attackPhase = 'recover';
+          e.attackTimer = 22;
+          e.isAttacking = false;
+          e.vx = 0;
+        }
+      } else if (e.attackPhase === 'recover') {
+        e.attackTimer--;
+        if (e.attackTimer <= 0) {
+          e.attackPhase = 'none';
+          e.attackCooldown = 85 + Math.floor(Math.random() * 30);
+        }
+      } else {
+        e.isAttacking = false;
+        if (isPlayerNearby && e.attackCooldown <= 0) {
+          e.dir = distToPlayerX > 0 ? 1 : -1;
+          e.attackPhase = 'windup';
+          e.attackTimer = 25;
+        } else {
+          if (e.pause > 0) { e.pause--; }
+          else {
+            e.x += e.speed * e.dir;
+            if (e.x < e.range[0]) { e.x = e.range[0]; e.dir = 1; e.pause = 26; }
+            if (e.x + e.w > e.range[1]) { e.x = e.range[1] - e.w; e.dir = -1; e.pause = 26; }
+          }
+        }
       }
     } else if (e.type === 'ball') {
       e.vy = (e.vy || 0) + GRAVITY * 0.55;
       e.y += e.vy;
-      if (e.y >= e.baseY) { e.y = e.baseY; e.vy = -9.2; }
+      // 當彈力球從高空高速下墜時視為重擊砸地攻擊 (vy > 3.2)！
+      e.isAttacking = (e.vy > 3.2);
+      if (e.y >= e.baseY) {
+        e.y = e.baseY;
+        e.vy = -10.5;
+        e.isAttacking = false; // 觸地反彈上升階段不傷人
+      }
     }
 
     // 5. 檢測玩家 AttackBox 與 敵人 HurtBox 碰撞
@@ -1108,10 +1226,14 @@ function updateEnemies() {
       let atkW = ATTACK_W;
       let atkH = ATTACK_H;
 
-      if (move.id === 'uppercut') {
-        atkY = player.y - 18;
-        atkH = ATTACK_H + 24;
-        atkW = ATTACK_W + 12;
+      // 迴旋踢判定更廣更長
+      if (move.id === 'kick') {
+        atkW = ATTACK_W + 30;
+        atkH = ATTACK_H + 8;
+        if (player.facing === -1) atkX -= 30;
+      } else if (move.id === 'head') {
+        atkW = ATTACK_W + 10;
+        atkH = ATTACK_H + 4;
       }
 
       const attackBox = new Hitbox(atkX, atkY, atkW, atkH);
@@ -1119,6 +1241,8 @@ function updateEnemies() {
 
       if (Hitbox.checkOverlap(attackBox, hurtBox)) {
         e.hasBeenHitThisAttack = true;
+        e.isAttacking = false; // 玩家攻擊打斷敵方攻擊！
+        e.attackPhase = 'none';
         player.attackHasHit = true;
         player.jumpCancelable = move.canJumpCancelOnHit;
         player.canComboCancel = true;
@@ -1136,7 +1260,7 @@ function updateEnemies() {
 
         const isKill = e.hp <= 0;
 
-        // 5.1 打擊停頓 (Hitstop / Frame Freeze: 4-7 幀)
+        // 5.1 打擊停頓 (Hitstop / Frame Freeze)
         const hitstopFrames = isKill ? move.hitstop + 2 : move.hitstop;
         Hitstop.trigger(hitstopFrames);
         e.hitstopTimer = hitstopFrames;
@@ -1148,11 +1272,14 @@ function updateEnemies() {
         e.flashTimer = hitstopFrames + 5;
         if (isKill) {
           e.deathLaunched = true;
-          e.deathTimer = 32;
-          e.kbVx = player.facing * (move.kbX * 1.8 + 2.2);
-          e.kbVy = Math.min(-7.5, move.kbY - 2.5);
+          e.deathTimer = 36;
+          // ★ 迴旋踢擊殺時，擊飛超遠！
+          const killMult = move.id === 'kick' ? 2.2 : 1.8;
+          e.kbVx = player.facing * (move.kbX * killMult + 3.0);
+          e.kbVy = Math.min(-8.5, move.kbY - 2.5);
         } else {
           e.hitStun = move.hitStun;
+          // ★ 在踢的時候，敵人會飛比較遠！
           e.kbVx = player.facing * move.kbX;
           e.kbVy = move.kbY;
         }
@@ -1167,7 +1294,7 @@ function updateEnemies() {
           attacker: player,
           defender: e,
           move: move,
-          isHeavy: move.id === 'uppercut',
+          isHeavy: move.id === 'kick',
           isKill: isKill,
           facing: player.facing,
           comboCount: player.comboCount
@@ -1175,9 +1302,13 @@ function updateEnemies() {
       }
     }
 
-    // 6. 敵人對玩家的接觸傷害（僅在非受擊與未死亡狀態下）
-    if (!e.deathLaunched && e.hitStun <= 0 && aabb(player.x, player.y, PLAYER_HIT_W, PLAYER_HIT_H, e.x, e.y, e.w, e.h)) {
-      hurtPlayer();
+    // 6. 核心機制：只有在敵人主動攻擊時 (e.isAttacking === true)，主角才會受傷！
+    // 單純碰到敵人不會受傷！
+    if (!e.deathLaunched && e.hitStun <= 0 && e.isAttacking) {
+      if (aabb(player.x, player.y, PLAYER_HIT_W, PLAYER_HIT_H, e.x, e.y, e.w, e.h)) {
+        hurtPlayer();
+        e.isAttacking = false; // 命中後單次結算傷害，避免多重扣血
+      }
     }
   }
 }
@@ -1187,19 +1318,22 @@ function updateBoss() {
   if (!b || b.phase === 'dead') return;
   if (b.hitCooldown > 0) b.hitCooldown--;
 
-  // 攻擊玩家 hitbox
-  if (aabb(player.x, player.y, PLAYER_HIT_W, PLAYER_HIT_H, b.x, b.y, b.w, b.h)) {
-    hurtPlayer();
+  // 攻擊玩家 hitbox - 只有在 Boss 進行 slam 重砸下墜時才造成直接碰撞傷害！
+  // 單純站在 Boss 旁邊不會受傷！
+  if (b.phase === 'action' && b.nextPattern === 'slam' && b.vy > 1.0) {
+    if (aabb(player.x, player.y, PLAYER_HIT_W, PLAYER_HIT_H, b.x, b.y, b.w, b.h)) {
+      hurtPlayer();
+    }
   }
 
-  // Boss 被咬打擊判定
+  // Boss 被咬/打擊判定
   if (player.attackFrames > 0 && player.attackMove && b.hitCooldown <= 0) {
     const move = player.attackMove;
     let atkX = player.facing === 1 ? player.x + PLAYER_HIT_W - 8 : player.x - ATTACK_W + 8;
     let atkY = player.y + 4;
     let atkW = ATTACK_W;
     let atkH = ATTACK_H;
-    if (move.id === 'uppercut') { atkY = player.y - 18; atkH = ATTACK_H + 24; atkW = ATTACK_W + 12; }
+    if (move.id === 'kick') { atkW = ATTACK_W + 30; atkH = ATTACK_H + 10; if (player.facing === -1) atkX -= 30; }
 
     const attackBox = new Hitbox(atkX, atkY, atkW, atkH);
     const hurtBox = new Hitbox(b.x, b.y, b.w, b.h);
@@ -1211,15 +1345,15 @@ function updateBoss() {
       player.comboCount = (player.comboCount || 0) + 1;
       player.comboResetTimer = 75;
 
-      b.hp--;
+      b.hp -= (move.id === 'kick' ? 2 : 1);
       b.hitCooldown = 32;
       b.flashTimer = 8;
 
       const contact = Hitbox.getContactPoint(attackBox, hurtBox);
       const isKill = b.hp <= 0;
 
-      Hitstop.trigger(isKill ? 12 : 6);
-      CameraShake.shake(isKill ? 8.0 : 5.0);
+      Hitstop.trigger(isKill ? 12 : move.hitstop + 1);
+      CameraShake.shake(isKill ? 8.5 : move.shake + 1.5);
       SFX.bosshit();
 
       VFXManager.emitHit({
@@ -1228,7 +1362,7 @@ function updateBoss() {
         attacker: player,
         defender: b,
         move: move,
-        isHeavy: true,
+        isHeavy: move.id === 'kick',
         isKill: isKill,
         facing: player.facing,
         comboCount: player.comboCount
@@ -1424,7 +1558,7 @@ function renderEnemies() {
   for (const e of enemies) {
     if (!e.alive) continue;
     const sx = e.x - cameraX;
-    if (sx > W + 60 || sx + e.w < -60) continue;
+    if (sx > W + 80 || sx + e.w < -80) continue;
     const img = assets[e.type];
     const flipX = e.dir ? e.dir < 0 : false;
 
@@ -1441,6 +1575,12 @@ function renderEnemies() {
         shakeX = (Math.random() - 0.5) * 5;
         shakeY = (Math.random() - 0.5) * 5;
       }
+      // 前搖蓄力抖動
+      if (e.attackPhase === 'windup') {
+        shakeX = (Math.random() - 0.5) * 3;
+        shakeY = (Math.random() - 0.5) * 2;
+        ctx.filter = 'brightness(1.5) saturate(1.8)';
+      }
       // 受擊閃爍 (Hit Flash Effect)
       if (e.flashTimer > 0) {
         ctx.filter = 'brightness(2.8) saturate(0.2)';
@@ -1449,9 +1589,28 @@ function renderEnemies() {
     }
     ctx.restore();
 
+    // 敵人攻擊前搖危險警示 (Telegraph Warning)
+    if (e.attackPhase === 'windup' && !e.deathLaunched) {
+      ctx.save();
+      ctx.font = 'bold 18px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠️', sx + e.w / 2, e.y - 14);
+      ctx.restore();
+    }
+
+    // 敵人攻擊中紅色氣浪特效
+    if (e.isAttacking && !e.deathLaunched) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 60, 0, 0.35)';
+      ctx.beginPath();
+      ctx.arc(sx + e.w / 2, e.y + e.h / 2, Math.max(e.w, e.h) * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     // 敵人頭頂血條 (受擊時顯示)
     if (e.hpBarTimer > 0 && e.maxHp > 1 && !e.deathLaunched) {
-      const barW = 34, barH = 5;
+      const barW = 44, barH = 5;
       const barX = sx + (e.w - barW) / 2;
       const barY = e.y - 12;
       ctx.fillStyle = 'rgba(0,0,0,0.65)';
@@ -1473,9 +1632,10 @@ function renderPlayer() {
     ctx.globalAlpha = 0.35;
   }
 
-  const animDef = SOJU_FRAMES[p.anim];
-  const frame = animDef.frames[p.animFrame];
-  const img = assets[p.anim];
+  const animDef = SOJU_FRAMES[p.anim] || SOJU_FRAMES.idle;
+  const frameIndex = p.animFrame % animDef.frames.length;
+  const frame = animDef.frames[frameIndex];
+  const img = assets[p.anim] || assets['idle'];
   drawSprite(img, frame, px, py, PLAYER_DRAW_W, PLAYER_DRAW_H, p.facing < 0);
 
   ctx.globalAlpha = 1;
