@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soju 關卡編輯器</title>
+<style>
+  :root { --ink:#18202a; --muted:#6c7782; --paper:#f7f4ed; --panel:#fffdf8; --line:#d9d4c9; --accent:#e85f3f; --green:#2c9b72; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; color:var(--ink); background:linear-gradient(135deg,#d9eee9 0%,#f7e7cf 52%,#e9d5d0 100%); font-family:"Avenir Next","PingFang TC",sans-serif; }
+  header { height:72px; display:flex; align-items:center; justify-content:space-between; padding:0 24px; background:rgba(255,253,248,.92); border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:22px; letter-spacing:0; } h1 span { color:var(--accent); }
+  .status { color:var(--muted); font-size:13px; }
+  main { display:grid; grid-template-columns:250px minmax(560px,1fr) 280px; gap:16px; padding:16px; height:calc(100vh - 72px); min-height:620px; }
+  .panel { background:rgba(255,253,248,.94); border:1px solid var(--line); border-radius:8px; box-shadow:0 10px 25px rgba(65,50,35,.08); overflow:hidden; }
+  .panel-title { padding:14px 16px 10px; font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+  .tools { padding:0 12px 14px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  button, select, input { font:inherit; }
+  button { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:5px; padding:9px 10px; cursor:pointer; }
+  button:hover { border-color:var(--accent); color:var(--accent); } button.primary { background:var(--accent); color:#fff; border-color:var(--accent); } button.green { background:var(--green); color:#fff; border-color:var(--green); }
+  button.active { background:#192c35; color:#fff; border-color:#192c35; }
+  .wide { grid-column:1/-1; } .tool-help { padding:0 14px 14px; color:var(--muted); font-size:12px; line-height:1.55; }
+  .palette-tabs { display:flex; gap:5px; padding:0 12px 10px; } .palette-tabs button { padding:7px 8px; font-size:12px; }
+  .palette { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; padding:0 12px 14px; max-height:calc(100vh - 300px); overflow:auto; }
+  .swatch { aspect-ratio:1; padding:3px; background:#e9f4f2; border:1px solid #cbdad7; border-radius:4px; position:relative; }
+  .swatch.selected { outline:3px solid var(--accent); outline-offset:1px; } .swatch canvas { width:100%; height:100%; image-rendering:pixelated; display:block; }
+  .swatch small { position:absolute; right:2px; bottom:1px; padding:0 2px; background:rgba(255,255,255,.8); font-size:9px; color:#455; }
+  .workspace { min-width:0; display:flex; flex-direction:column; padding:12px; }
+  .workspace-bar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 2px 10px; flex-wrap:wrap; }
+  .workspace-bar label { color:var(--muted); font-size:12px; } .workspace-bar input { width:62px; border:1px solid var(--line); border-radius:4px; padding:6px; }
+  .canvas-wrap { flex:1; min-height:0; overflow:hidden; background:#17252a; border-radius:5px; position:relative; cursor:crosshair; }
+  #editorCanvas { display:block; width:100%; height:100%; image-rendering:pixelated; }
+  .coordinates { position:absolute; left:10px; bottom:8px; color:#fff; background:rgba(0,0,0,.55); border-radius:4px; padding:5px 7px; font:12px monospace; pointer-events:none; }
+  .inspector { padding-bottom:14px; } .field { padding:0 14px 12px; } .field label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; } .field input, .field select { width:100%; padding:8px; border:1px solid var(--line); border-radius:4px; background:#fff; }
+  .actions { display:grid; gap:8px; padding:0 14px; } .legend { padding:14px; font-size:12px; color:var(--muted); line-height:1.65; border-top:1px solid var(--line); margin-top:14px; }
+  @media (max-width:1050px) { main { grid-template-columns:210px minmax(440px,1fr); } .inspector { display:none; } }
+  @media (max-width:720px) { header { padding:0 12px; } main { display:block; height:auto; min-height:calc(100vh - 72px); } .panel { margin-bottom:12px; } .palette { max-height:190px; } .workspace { height:65vh; } }
+</style>
+</head>
+<body>
+<header><h1><span>Soju</span> 關卡編輯器</h1><div class="status" id="status">Kenney Pixel Platformer · CC0</div></header>
+<main>
+  <aside class="panel">
+    <div class="panel-title">工具</div>
+    <div class="tools">
+      <button class="active" data-tool="paint">畫筆</button><button data-tool="erase">橡皮擦</button>
+      <button data-tool="select">選取移動</button><button data-tool="fill">填滿區域</button>
+      <button data-tool="pan">平移畫布</button>
+      <button id="undo">復原</button><button id="redo">重做</button>
+      <button id="clear">清空</button><button id="gridToggle">網格：開</button>
+    </div>
+    <div class="panel-title">素材圖集</div>
+    <div class="palette-tabs"><button class="active" data-palette="tiles">地形</button><button data-palette="backgrounds">背景</button><button data-palette="characters">角色</button></div>
+    <div id="palette" class="palette"></div>
+    <div class="tool-help">左鍵放置圖塊，右鍵快速擦除。選「選取移動」框選矩形後，可拖曳整塊圖層內容；按住 Option/Alt 拖曳會複製到新位置。按住中鍵、空白鍵或選擇「平移畫布」可拖動畫面；滾輪縮放。</div>
+  </aside>
+
+  <section class="panel workspace">
+    <div class="workspace-bar">
+      <div><label>地圖名稱 </label><input id="mapName" value="soju-outdoor-01"></div>
+      <div><label>縮放 </label><span id="zoomLabel">200%</span> <button id="zoomOut">−</button><button id="zoomIn">＋</button></div>
+      <div><button id="newMap">新地圖</button><button class="green" id="saveGame">儲存本機草稿</button><button class="primary" id="exportMap">匯出 JSON</button></div>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap"><canvas id="editorCanvas"></canvas><div class="coordinates" id="coordinates">tile 0, 0</div></div>
+  </section>
+
+  <aside class="panel inspector">
+    <div class="panel-title">圖塊資訊</div>
+    <div class="field"><label>目前圖集</label><input id="selectedSet" readonly value="tiles"></div>
+    <div class="field"><label>圖塊索引</label><input id="selectedTile" readonly value="0"></div>
+    <div class="field"><label>畫布格子尺寸</label><input id="tileInfo" readonly value="36 × 36 px"></div>
+    <div class="panel-title">地圖資料</div>
+    <div class="field"><label>地圖寬度（格）</label><input id="mapWidth" type="number" min="40" max="480" value="240"></div>
+    <div class="field"><label>地圖高度（格）</label><input id="mapHeight" type="number" min="12" max="40" value="20"></div>
+    <div class="actions"><button id="resizeMap">套用地圖尺寸</button><button id="importMap">匯入 JSON</button><input id="fileInput" type="file" accept="application/json" hidden></div>
+    <div class="legend">編輯器只使用專案內的 Kenney 圖集。<br>匯出的 JSON 可保存你的地圖配置；「儲存本機草稿」會寫入瀏覽器的 `localStorage`。選取移動會同時搬動三個圖層。</div>
+  </aside>
+</main>
+<script>
+'use strict';
+const TILE = 36;
+const SOURCES = {
+  tiles: { src:'imgs/kenney_pixel-platformer/Tilemap/tilemap_packed.png', size:18, cols:20 },
+  backgrounds: { src:'imgs/kenney_pixel-platformer/Tilemap/tilemap-backgrounds_packed.png', size:24, cols:15 },
+  characters: { src:'imgs/kenney_pixel-platformer/Tilemap/tilemap-characters_packed.png', size:24, cols:9 },
+};
+const images = {};
+const canvas = document.getElementById('editorCanvas');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const wrap = document.getElementById('canvasWrap');
+let map = { name:'soju-outdoor-01', width:240, height:20, layers:{ tiles:[], backgrounds:[], characters:[] } };
+let activePalette = 'tiles';
+let selectedTile = 0;
+let tool = 'paint';
+let zoom = 2;
+let origin = { x:24, y:24 };
+let gridOn = true;
+let history = [], future = [];
+let drawing = false;
+let panning = false;
+let panStart = null;
+let spaceHeld = false;
+let selection = null;
+let selecting = false;
+let movingSelection = false;
+let selectionStart = null;
+let selectionOrigin = null;
+let selectionData = null;
+let copyingSelection = false;
+
+function loadImage(name, src) { return new Promise(resolve => { const img = new Image(); img.onload=()=>{images[name]=img;resolve();}; img.onerror=()=>resolve(); img.src=src; }); }
+function blankLayer() { return Array.from({length:map.width * map.height}, () => 0); }
+function ensureLayers() { for (const key of Object.keys(SOURCES)) { if (!map.layers[key] || map.layers[key].length !== map.width * map.height) map.layers[key] = blankLayer(); } }
+function indexAt(col,row) { return row * map.width + col; }
+function snapshot() { return JSON.stringify(map); }
+function restore(value) { map = JSON.parse(value); ensureLayers(); document.getElementById('mapName').value=map.name; document.getElementById('mapWidth').value=map.width; document.getElementById('mapHeight').value=map.height; render(); }
+function restoreMapFromSnapshot(value) { map = JSON.parse(value); ensureLayers(); }
+function loadLocalDraft() { const saved=localStorage.getItem('soju-custom-level'); if(!saved)return false; try { restore(saved); document.getElementById('status').textContent='已載入本機草稿'; return true; } catch(error) { localStorage.removeItem('soju-custom-level'); return false; } }
+function commit() { history.push(snapshot()); if (history.length > 40) history.shift(); future=[]; }
+function setTool(next) { tool=next; document.querySelectorAll('[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool)); }
+function setPalette(next) { activePalette=next; selectedTile=0; document.querySelectorAll('[data-palette]').forEach(b=>b.classList.toggle('active',b.dataset.palette===activePalette)); document.getElementById('selectedSet').value=activePalette; document.getElementById('selectedTile').value=selectedTile; document.getElementById('tileInfo').value=`${TILE} × ${TILE} px`; buildPalette(); }
+function resizeCanvas() { const rect=wrap.getBoundingClientRect(); canvas.width=rect.width; canvas.height=rect.height; render(); }
+function tileFromPointer(event) { const rect=canvas.getBoundingClientRect(); return { col:Math.floor((event.clientX-rect.left-origin.x)/(TILE*zoom)), row:Math.floor((event.clientY-rect.top-origin.y)/(TILE*zoom)) }; }
+function drawTile(sheet, index, x, y, size) { const source=SOURCES[sheet]; const img=images[sheet]; if(!img || !index) return; const sx=(index-1)%source.cols*source.size; const sy=Math.floor((index-1)/source.cols)*source.size; ctx.drawImage(img,sx,sy,source.size,source.size,Math.round(x),Math.round(y),TILE*zoom,TILE*zoom); }
+function normalizeSelection(a,b) { return { x:Math.min(a.col,b.col), y:Math.min(a.row,b.row), w:Math.abs(a.col-b.col)+1, h:Math.abs(a.row-b.row)+1 }; }
+function selectionContains(selectionBox, pos) { return selectionBox && pos.col >= selectionBox.x && pos.row >= selectionBox.y && pos.col < selectionBox.x + selectionBox.w && pos.row < selectionBox.y + selectionBox.h; }
+function captureSelection(box) { return Object.fromEntries(Object.keys(SOURCES).map(key => [key, Array.from({length:box.h}, (_, row) => Array.from({length:box.w}, (_, col) => map.layers[key][indexAt(box.x + col, box.y + row)] || 0))])); }
+function applySelection(sourceBox, destinationBox, data, clearSource = true) { for (const key of Object.keys(SOURCES)) { if (clearSource) for (let row=0;row<sourceBox.h;row++) for (let col=0;col<sourceBox.w;col++) if(sourceBox.x+col>=0&&sourceBox.y+row>=0&&sourceBox.x+col<map.width&&sourceBox.y+row<map.height) map.layers[key][indexAt(sourceBox.x+col,sourceBox.y+row)]=0; for (let row=0;row<destinationBox.h;row++) for (let col=0;col<destinationBox.w;col++) { const x=destinationBox.x+col,y=destinationBox.y+row; if(x>=0&&y>=0&&x<map.width&&y<map.height) map.layers[key][indexAt(x,y)]=data[key][row][col]; } } }
+function render() {
+  ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#d8eef0'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.save(); ctx.translate(origin.x,origin.y);
+  for (let row=0;row<map.height;row++) for (let col=0;col<map.width;col++) { const x=col*TILE*zoom,y=row*TILE*zoom; const i=indexAt(col,row); drawTile('backgrounds',map.layers.backgrounds[i],x,y); drawTile('tiles',map.layers.tiles[i],x,y); drawTile('characters',map.layers.characters[i],x,y); }
+  if(gridOn){ ctx.strokeStyle='rgba(35,55,62,.18)'; ctx.lineWidth=1; for(let x=0;x<=map.width*TILE*zoom;x+=TILE*zoom){ctx.beginPath();ctx.moveTo(x+.5,0);ctx.lineTo(x+.5,map.height*TILE*zoom);ctx.stroke();} for(let y=0;y<=map.height*TILE*zoom;y+=TILE*zoom){ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(map.width*TILE*zoom,y+.5);ctx.stroke();} }
+  if (selection) { ctx.fillStyle='rgba(232,95,63,.16)'; ctx.fillRect(selection.x*TILE*zoom, selection.y*TILE*zoom, selection.w*TILE*zoom, selection.h*TILE*zoom); ctx.strokeStyle='#e85f3f'; ctx.lineWidth=2; ctx.strokeRect(selection.x*TILE*zoom+.5, selection.y*TILE*zoom+.5, selection.w*TILE*zoom-1, selection.h*TILE*zoom-1); }
+  ctx.restore();
+}
+function buildPalette() { const box=document.getElementById('palette'); box.innerHTML=''; const source=SOURCES[activePalette]; const img=images[activePalette]; if(!img)return; const count=activePalette==='characters'?1:Math.floor(img.width/source.size)*Math.floor(img.height/source.size); for(let n=0;n<count;n++){ const button=document.createElement('button'); button.className='swatch'+(n===selectedTile?' selected':''); const c=document.createElement('canvas'); c.width=source.size;c.height=source.size; const cctx=c.getContext('2d');cctx.imageSmoothingEnabled=false;cctx.drawImage(img,(n%source.cols)*source.size,Math.floor(n/source.cols)*source.size,source.size,source.size,0,0,source.size,source.size);button.append(c);const label=document.createElement('small');label.textContent=activePalette==='characters'?'敵人':n;button.append(label);button.onclick=()=>{selectedTile=n;document.getElementById('selectedTile').value=n;box.querySelectorAll('.swatch').forEach(x=>x.classList.remove('selected'));button.classList.add('selected');setTool('paint');};box.append(button); } }
+function paintAt(col,row) { if(col<0||row<0||col>=map.width||row>=map.height)return; const i=indexAt(col,row); const layer=map.layers[activePalette]; const next=tool==='erase'?0:selectedTile+1; if(layer[i]===next)return; layer[i]=next; render(); }
+function flood(col,row) { if(col<0||row<0||col>=map.width||row>=map.height)return; const layer=map.layers[activePalette], start=layer[indexAt(col,row)], next=tool==='erase'?0:selectedTile+1; if(start===next)return; const queue=[[col,row]], seen=new Set(); while(queue.length){const [x,y]=queue.shift(),key=`${x},${y}`;if(seen.has(key)||x<0||y<0||x>=map.width||y>=map.height||layer[indexAt(x,y)]!==start)continue;seen.add(key);layer[indexAt(x,y)]=next;queue.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);} render(); }
+function exportMap() { const data=JSON.stringify({...map, version:1, tileSize:TILE},null,2); const blob=new Blob([data],{type:'application/json'}); const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${map.name||'soju-level'}.json`;a.click();URL.revokeObjectURL(a.href); document.getElementById('status').textContent='已匯出 JSON'; }
+function pointerDown(e) { e.preventDefault(); canvas.setPointerCapture?.(e.pointerId); if(e.button===1||tool==='pan'||spaceHeld){panning=true;panStart={x:e.clientX,y:e.clientY,ox:origin.x,oy:origin.y};return;} const pos=tileFromPointer(e); if(tool==='select'){if(selectionContains(selection,pos)){commit();selectionData=captureSelection(selection);selectionOrigin={...selection};copyingSelection=e.altKey;movingSelection=true;selectionStart=pos;}else{selecting=true;selectionStart=pos;selection=null;}render();return;} commit(); if(tool==='fill')flood(pos.col,pos.row);else paintAt(pos.col,pos.row);drawing=true; }
+function pointerMove(e) { const pos=tileFromPointer(e);document.getElementById('coordinates').textContent=`tile ${pos.col}, ${pos.row}`;if(panning){origin.x=panStart.ox+e.clientX-panStart.x;origin.y=panStart.oy+e.clientY-panStart.y;render();return;}if(tool==='select'&&selecting){selection=normalizeSelection(selectionStart,pos);render();return;}if(tool==='select'&&movingSelection){const dx=pos.col-selectionStart.col,dy=pos.row-selectionStart.row;const next={x:selectionOrigin.x+dx,y:selectionOrigin.y+dy,w:selectionOrigin.w,h:selectionOrigin.h};restoreMapFromSnapshot(history[history.length-1]);applySelection(selectionOrigin,next,selectionData,!copyingSelection);selection=next;render();return;}if(drawing&&tool!=='fill')paintAt(pos.col,pos.row); }
+function pointerUp(e){if(tool==='select'&&selecting){selecting=false;if(selection)selection={x:Math.max(0,Math.min(map.width-1,selection.x)),y:Math.max(0,Math.min(map.height-1,selection.y)),w:Math.min(selection.w,map.width),h:Math.min(selection.h,map.height)};}if(tool==='select'&&movingSelection){movingSelection=false;selectionData=null;selectionOrigin=null;copyingSelection=false;}drawing=false;panning=false;if(e?.pointerId !== undefined && canvas.hasPointerCapture?.(e.pointerId)) canvas.releasePointerCapture(e.pointerId);render();}
+for(const b of document.querySelectorAll('[data-tool]'))b.onclick=()=>setTool(b.dataset.tool); for(const b of document.querySelectorAll('[data-palette]'))b.onclick=()=>setPalette(b.dataset.palette);
+canvas.addEventListener('pointerdown',pointerDown);canvas.addEventListener('pointermove',pointerMove);window.addEventListener('pointermove',e=>{if(panning)pointerMove(e);},{passive:false});window.addEventListener('pointerup',pointerUp);canvas.addEventListener('contextmenu',e=>{e.preventDefault();const old=tool;tool='erase';paintAt(...Object.values(tileFromPointer(e)));tool=old;});
+window.addEventListener('keydown',e=>{if(e.code==='Space'){spaceHeld=true;e.preventDefault();}});window.addEventListener('keyup',e=>{if(e.code==='Space'){spaceHeld=false;e.preventDefault();}});
+canvas.addEventListener('wheel',e=>{e.preventDefault();const before=tileFromPointer(e);zoom=Math.max(1,Math.min(4,zoom+(e.deltaY<0?.25:-.25)));const after=tileFromPointer(e);origin.x+=(after.col-before.col)*TILE*zoom;origin.y+=(after.row-before.row)*TILE*zoom;document.getElementById('zoomLabel').textContent=Math.round(zoom*100)+'%';render();},{passive:false});
+document.getElementById('undo').onclick=()=>{if(!history.length)return;future.push(snapshot());restore(history.pop());};document.getElementById('redo').onclick=()=>{if(!future.length)return;history.push(snapshot());restore(future.pop());};document.getElementById('clear').onclick=()=>{commit();for(const key of Object.keys(map.layers))map.layers[key]=blankLayer();render();};document.getElementById('gridToggle').onclick=e=>{gridOn=!gridOn;e.target.textContent=`網格：${gridOn?'開':'關'}`;render();};document.getElementById('zoomIn').onclick=()=>{zoom=Math.min(4,zoom+.25);document.getElementById('zoomLabel').textContent=Math.round(zoom*100)+'%';render();};document.getElementById('zoomOut').onclick=()=>{zoom=Math.max(1,zoom-.25);document.getElementById('zoomLabel').textContent=Math.round(zoom*100)+'%';render();};
+document.getElementById('newMap').onclick=()=>{if(!confirm('建立新地圖並清除目前編輯內容？'))return;map={name:'new-level',width:240,height:20,layers:{tiles:[],backgrounds:[],characters:[]}};ensureLayers();history=[];future=[];restore(snapshot());};document.getElementById('saveGame').onclick=()=>{map.name=document.getElementById('mapName').value.trim()||'soju-level';localStorage.setItem('soju-custom-level',JSON.stringify(map));document.getElementById('status').textContent='已儲存至本機瀏覽器';};document.getElementById('exportMap').onclick=()=>{map.name=document.getElementById('mapName').value.trim()||'soju-level';exportMap();};document.getElementById('resizeMap').onclick=()=>{const old=map;commit();map={...old,width:Math.max(40,Math.min(480,Number(document.getElementById('mapWidth').value))),height:Math.max(12,Math.min(40,Number(document.getElementById('mapHeight').value))),layers:{tiles:[],backgrounds:[],characters:[]}};ensureLayers();for(const key of Object.keys(map.layers))for(let y=0;y<Math.min(old.height,map.height);y++)for(let x=0;x<Math.min(old.width,map.width);x++)map.layers[key][indexAt(x,y)]=old.layers[key][y*old.width+x]||0;render();};document.getElementById('importMap').onclick=()=>document.getElementById('fileInput').click();document.getElementById('fileInput').onchange=async e=>{const file=e.target.files[0];if(!file)return;restore(await file.text());document.getElementById('status').textContent='已匯入 JSON';};
+window.addEventListener('resize',resizeCanvas);
+(async()=>{await Promise.all(Object.entries(SOURCES).map(([key,value])=>loadImage(key,value.src)));if(!loadLocalDraft())ensureLayers();buildPalette();resizeCanvas();})();
+</script>
+</body>
+</html>

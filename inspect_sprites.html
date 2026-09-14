@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { background: #1a1220; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; }
+  .row { display: flex; gap: 30px; margin: 20px; }
+  .card { background: #2a2035; padding: 15px; border-radius: 8px; text-align: center; }
+  canvas { background: #3a2845; image-rendering: pixelated; border: 1px solid #777; }
+</style>
+</head>
+<body>
+<h2>Soju Idle Animation Comparison</h2>
+<div class="row">
+  <div class="card">
+    <h3>Original (Current in Game)</h3>
+    <canvas id="c1" width="160" height="160"></canvas>
+    <div id="info1"></div>
+  </div>
+  <div class="card">
+    <h3>Fixed 4-Frames (Consistent Bounds & Scale)</h3>
+    <canvas id="c2" width="160" height="160"></canvas>
+    <div id="info2"></div>
+  </div>
+  <div class="card">
+    <h3>2-Frames (Frame 1 & 2 Ping-Pong Breathing)</h3>
+    <canvas id="c3" width="160" height="160"></canvas>
+    <div id="info3"></div>
+  </div>
+</div>
+
+<script>
+async function run() {
+  const img = new Image();
+  img.src = 'imgs/idle.jpeg';
+  await new Promise(r => img.onload = r);
+  
+  const oc = document.createElement('canvas');
+  oc.width = img.width; oc.height = img.height;
+  const octx = oc.getContext('2d');
+  octx.drawImage(img, 0, 0);
+  const d = octx.getImageData(0, 0, img.width, img.height);
+  const px = d.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const r = px[i], g = px[i+1], b = px[i+2];
+    const isGray = Math.abs(r-g) <= 14 && Math.abs(g-b) <= 14;
+    const matchBg = Math.abs(r-135) <= 26 && Math.abs(g-135) <= 26 && Math.abs(b-135) <= 26;
+    if (isGray && matchBg) px[i+3] = 0;
+  }
+  octx.putImageData(d, 0, 0);
+
+  // Original frames
+  const origFrames = [
+    { sx: 40, sy: 125, sw: 460, sh: 365 },
+    { sx: 560, sy: 125, sw: 460, sh: 365 },
+    { sx: 40, sy: 555, sw: 460, sh: 345 },
+    { sx: 560, sy: 555, sw: 460, sh: 345 },
+  ];
+
+  // Fixed 4 frames:
+  // We want identical sw and sh for all frames, aligned to the feet at bottom!
+  // In row 1, feet are at y=488. If sh=370, sy = 488 - 370 + 5 = 123.
+  // In row 2, feet are at y=911. If sh=370, sy = 911 - 370 + 5 = 546.
+  // Let's check: sw = 420.
+  // Row 1 Col 1 center x ~ 280 -> sx = 70. Col 2 center x ~ 796 -> sx = 586.
+  // Row 2 Col 1 center x ~ 285 -> sx = 75. Col 2 center x ~ 792 -> sx = 582.
+  const fixedFrames = [
+    { sx: 70,  sy: 123, sw: 420, sh: 370 },
+    { sx: 586, sy: 123, sw: 420, sh: 370 },
+    { sx: 75,  sy: 546, sw: 420, sh: 370 },
+    { sx: 582, sy: 546, sw: 420, sh: 370 },
+  ];
+
+  // 2 frames ping pong: 0, 1, 0, 1
+  const pingPongFrames = [
+    { sx: 70,  sy: 123, sw: 420, sh: 370 },
+    { sx: 586, sy: 123, sw: 420, sh: 370 },
+  ];
+
+  const ctx1 = document.getElementById('c1').getContext('2d');
+  const ctx2 = document.getElementById('c2').getContext('2d');
+  const ctx3 = document.getElementById('c3').getContext('2d');
+  [ctx1, ctx2, ctx3].forEach(c => c.imageSmoothingEnabled = false);
+
+  let tick = 0;
+  function animate() {
+    tick++;
+    const frame4Idx = Math.floor(tick / 14) % 4;
+    const frame2Idx = Math.floor(tick / 18) % 2;
+
+    // Draw baseline
+    [ctx1, ctx2, ctx3].forEach(c => {
+      c.clearRect(0,0,160,160);
+      c.strokeStyle = '#e03060';
+      c.beginPath(); c.moveTo(0, 140); c.lineTo(160, 140); c.stroke();
+    });
+
+    // 1. Orig
+    const f1 = origFrames[frame4Idx];
+    ctx1.drawImage(oc, f1.sx, f1.sy, f1.sw, f1.sh, 42, 140 - 68, 76, 68);
+
+    // 2. Fixed 4
+    const f2 = fixedFrames[frame4Idx];
+    // scale aspect ratio preserved: 76 x (76 * 370 / 420 = 66.9)
+    ctx2.drawImage(oc, f2.sx, f2.sy, f2.sw, f2.sh, 42, 140 - 67, 76, 67);
+
+    // 3. Ping pong 2
+    const f3 = pingPongFrames[frame2Idx];
+    ctx3.drawImage(oc, f3.sx, f3.sy, f3.sw, f3.sh, 42, 140 - 67, 76, 67);
+
+    requestAnimationFrame(animate);
+  }
+  requestAnimationFrame(animate);
+}
+run();
+</script>
+</body>
+</html>

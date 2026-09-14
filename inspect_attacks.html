@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { background: #181528; color: #fff; font-family: monospace; padding: 20px; }
+  .grid { display: flex; flex-direction: column; gap: 30px; }
+  .row { background: #242038; padding: 15px; border-radius: 8px; }
+  canvas { background: #3b3558; border: 1px solid #777; margin: 5px; }
+  .anims { display: flex; gap: 20px; align-items: center; }
+</style>
+</head>
+<body>
+<h1>Attack Sprites Inspector & Live Playback</h1>
+<div class="grid" id="container"></div>
+
+<script>
+const SPRITES = [
+  { name: 'idle', file: 'imgs/idle.jpeg', n: 4, bg: [135,135,135], tol: 30, isGrid: true },
+  { name: 'attack_punch', file: 'imgs/attack_punch.jpg', n: 3, bg: [119,119,119], tol: 32 },
+  { name: 'attack_head', file: 'imgs/attack_head.jpg', n: 3, bg: [116,116,116], tol: 32 },
+  { name: 'attack_kick', file: 'imgs/attack_kick.jpeg', n: 5, bg: [163,163,161], tol: 32 },
+];
+
+async function init() {
+  const container = document.getElementById('container');
+
+  for (const s of SPRITES) {
+    const img = new Image();
+    img.src = s.file;
+    await new Promise(r => img.onload = r);
+
+    // Process chroma key
+    const rawC = document.createElement('canvas');
+    rawC.width = img.width; rawC.height = img.height;
+    const rawCtx = rawC.getContext('2d');
+    rawCtx.drawImage(img, 0, 0);
+    const idata = rawCtx.getImageData(0, 0, img.width, img.height);
+    const px = idata.data;
+
+    // Also inspect corner pixel colors of raw image
+    const cornerColors = [
+      `top-left: [${px[0]}, ${px[1]}, ${px[2]}]`,
+      `top-mid: [${px[Math.floor(img.width/2)*4]}, ${px[Math.floor(img.width/2)*4+1]}, ${px[Math.floor(img.width/2)*4+2]}]`,
+      `bot-left: [${px[((img.height-1)*img.width)*4]}, ${px[((img.height-1)*img.width)*4+1]}, ${px[((img.height-1)*img.width)*4+2]}]`
+    ];
+
+    const cleanC = document.createElement('canvas');
+    cleanC.width = img.width; cleanC.height = img.height;
+    const cleanCtx = cleanC.getContext('2d');
+    for (let i = 0; i < px.length; i += 4) {
+      const r = px[i], g = px[i+1], b = px[i+2];
+      const isGray = Math.abs(r - g) <= 18 && Math.abs(g - b) <= 18;
+      const matchBg = Math.abs(r - s.bg[0]) <= s.tol && Math.abs(g - s.bg[1]) <= s.tol && Math.abs(b - s.bg[2]) <= s.tol;
+      if (isGray && matchBg) px[i+3] = 0;
+    }
+    cleanCtx.putImageData(idata, 0, 0);
+
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<h3>${s.name} (${img.width}x${img.height}) | BG corners: ${cornerColors.join(', ')}</h3>`;
+
+    const animDiv = document.createElement('div');
+    animDiv.className = 'anims';
+
+    // 1. Strip preview
+    const stripC = document.createElement('canvas');
+    const scale = Math.min(1, 700 / img.width);
+    stripC.width = img.width * scale;
+    stripC.height = img.height * scale;
+    const stripCtx = stripC.getContext('2d');
+    stripCtx.drawImage(cleanC, 0, 0, stripC.width, stripC.height);
+    animDiv.appendChild(stripC);
+
+    // 2. Animated playback preview
+    const playC = document.createElement('canvas');
+    playC.width = 160; playC.height = 140;
+    const playCtx = playC.getContext('2d');
+    playCtx.imageSmoothingEnabled = false;
+    animDiv.appendChild(playC);
+
+    row.appendChild(animDiv);
+    container.appendChild(row);
+
+    // Setup animation loop for playC
+    let frameIdx = 0;
+    let t = 0;
+    const fw = s.isGrid ? 460 : Math.floor(img.width / s.n);
+    const fh = s.isGrid ? 365 : img.height;
+    const totalF = s.n;
+
+    setInterval(() => {
+      t++;
+      frameIdx = Math.floor(t / 8) % totalF;
+      playCtx.clearRect(0, 0, 160, 140);
+      // Red baseline
+      playCtx.strokeStyle = '#ff3366';
+      playCtx.beginPath();
+      playCtx.moveTo(0, 120); playCtx.lineTo(160, 120);
+      playCtx.stroke();
+
+      let sx, sy, sw = fw, sh = fh;
+      if (s.isGrid) {
+        sx = (frameIdx % 2) * 520 + 40;
+        sy = Math.floor(frameIdx / 2) * 430 + 125;
+      } else {
+        sx = frameIdx * fw;
+        sy = 0;
+      }
+      // Draw stretched to 112x90 like current game
+      playCtx.drawImage(cleanC, sx, sy, sw, sh, 24, 120 - 90, 112, 90);
+    }, 1000 / 60);
+  }
+}
+init();
+</script>
+</body>
+</html>

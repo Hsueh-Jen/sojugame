@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sprite Sheet Normalizer</title>
+<style>
+  body { background: #121020; color: #eee; font-family: monospace; padding: 20px; }
+  .card { background: #1c1830; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
+  canvas { background: #2a2545; border: 1px solid #555; margin: 5px; image-rendering: pixelated; }
+  .row { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+  button { padding: 10px 18px; font-size: 15px; background: #e03060; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+  button:hover { background: #ff4070; }
+  #status { font-weight: bold; color: #30ff80; }
+</style>
+</head>
+<body>
+<h1>Soju Attack Sprites Normalizer (460x365 Standard Grid)</h1>
+<div id="status">Initializing...</div>
+<div id="views"></div>
+
+<script>
+const FRAME_W = 460;
+const FRAME_H = 365;
+const BASELINE_Y = 355; // Paws baseline in 365h frame
+const TARGET_BODY_H = 310; // Target Soju body height (ears to paws)
+
+async function run() {
+  const status = document.getElementById('status');
+  const views = document.getElementById('views');
+
+  // 1. Process attack_punch
+  status.textContent = 'Processing attack_punch...';
+  const punchRes = await processPunch();
+  views.appendChild(punchRes.card);
+
+  // 2. Process attack_head
+  status.textContent = 'Processing attack_head...';
+  const headRes = await processHead();
+  views.appendChild(headRes.card);
+
+  // 3. Process attack_kick
+  status.textContent = 'Processing attack_kick...';
+  const kickRes = await processKick();
+  views.appendChild(kickRes.card);
+
+  // Save all to server
+  status.textContent = 'Saving normalized sprites to imgs/...';
+  await saveSprite('attack_punch.png', punchRes.canvas.toDataURL('image/png'));
+  await saveSprite('attack_head.png', headRes.canvas.toDataURL('image/png'));
+  await saveSprite('attack_kick.png', kickRes.canvas.toDataURL('image/png'));
+
+  status.textContent = '✅ All attack sprites successfully normalized, aligned, and saved as transparent PNGs!';
+}
+
+async function saveSprite(filename, base64) {
+  const resp = await fetch('http://localhost:8766/save-sprite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, base64 })
+  });
+  return await resp.json();
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// 1. Process PUNCH (5 frames)
+// ─────────────────────────────────────────────────────────────
+async function processPunch() {
+  const img = await loadImage('../imgs/attack_punch.jpg');
+  const rawC = document.createElement('canvas');
+  rawC.width = img.width; rawC.height = img.height;
+  const rawCtx = rawC.getContext('2d');
+  rawCtx.drawImage(img, 0, 0);
+
+  // Clean chroma key & remove text
+  const idata = rawCtx.getImageData(0, 0, img.width, img.height);
+  const px = idata.data;
+  const w = img.width, h = img.height;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const r = px[i], g = px[i+1], b = px[i+2];
+      // Background gray
+      const isGray = Math.abs(r - g) <= 18 && Math.abs(g - b) <= 18;
+      const matchBg = Math.abs(r - 119) <= 32 && Math.abs(g - 119) <= 32 && Math.abs(b - 119) <= 32;
+      if (isGray && matchBg) {
+        px[i+3] = 0;
+      }
+      // Top text "雙手往前揍攻擊" (x: 0..260, y: 0..45)
+      if (x < 260 && y < 45) {
+        px[i+3] = 0;
+      }
+      // Bottom text "FRAME 1..5" (y > 212)
+      if (y > 212) {
+        px[i+3] = 0;
+      }
+    }
+  }
+  rawCtx.putImageData(idata, 0, 0);
+
+  // 5 frames. Approximate column boundaries in 903px:
+  const colBounds = [
+    { x1: 20, x2: 175 },
+    { x1: 175, x2: 335 },
+    { x1: 335, x2: 560 }, // Frame 3 is punching forward
+    { x1: 560, x2: 730 },
+    { x1: 730, x2: 890 },
+  ];
+
+  const outC = document.createElement('canvas');
+  outC.width = FRAME_W * 5;
+  outC.height = FRAME_H;
+  const outCtx = outC.getContext('2d');
+  outCtx.imageSmoothingEnabled = false;
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h3>Normalized attack_punch.png (${outC.width}x${outC.height}, 5 frames)</h3>`;
+
+  colBounds.forEach((b, idx) => {
+    // Find tight bbox of character in this column
+    const bbox = getTightBBox(idata, b.x1, b.x2, 10, 212);
+    if (!bbox) return;
+
+    // Scale so body height ~ TARGET_BODY_H (or relative to standing height)
+    // Standing dog in frame 0 is ~150px tall
+    const baseH = 150;
+    const scale = TARGET_BODY_H / baseH; // ~2.06
+    const dw = Math.round(bbox.w * scale);
+    const dh = Math.round(bbox.h * scale);
+
+    // Target position: paws baseline
+    const pawsFromTop = (bbox.maxY - bbox.minY) * scale;
+    const dy = Math.round(BASELINE_Y - pawsFromTop);
+    const dx = idx * FRAME_W + Math.round((FRAME_W - dw) / 2);
+
+    outCtx.drawImage(rawC, bbox.minX, bbox.minY, bbox.w, bbox.h, dx, dy, dw, dh);
+  });
+
+  card.appendChild(createPreview(outC, 5));
+  return { card, canvas: outC };
+}
+
+// ─────────────────────────────────────────────────────────────
+// 2. Process HEAD (3 frames)
+// ─────────────────────────────────────────────────────────────
+async function processHead() {
+  const img = await loadImage('../imgs/attack_head.jpg');
+  const rawC = document.createElement('canvas');
+  rawC.width = img.width; rawC.height = img.height;
+  const rawCtx = rawC.getContext('2d');
+  rawCtx.drawImage(img, 0, 0);
+
+  const idata = rawCtx.getImageData(0, 0, img.width, img.height);
+  const px = idata.data;
+  const w = img.width, h = img.height;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const r = px[i], g = px[i+1], b = px[i+2];
+      const isGray = Math.abs(r - g) <= 18 && Math.abs(g - b) <= 18;
+      const matchBg = Math.abs(r - 116) <= 32 && Math.abs(g - 116) <= 32 && Math.abs(b - 116) <= 32;
+      if (isGray && matchBg) {
+        px[i+3] = 0;
+      }
+      // Bottom labels "FRAME 7..9" (y > 388)
+      if (y > 388) {
+        px[i+3] = 0;
+      }
+    }
+  }
+  rawCtx.putImageData(idata, 0, 0);
+
+  const fw = Math.floor(w / 3); // 577
+  const colBounds = [
+    { x1: 0 * fw, x2: 1 * fw },
+    { x1: 1 * fw, x2: 2 * fw },
+    { x1: 2 * fw, x2: 3 * fw },
+  ];
+
+  const outC = document.createElement('canvas');
+  outC.width = FRAME_W * 3;
+  outC.height = FRAME_H;
+  const outCtx = outC.getContext('2d');
+  outCtx.imageSmoothingEnabled = false;
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h3>Normalized attack_head.png (${outC.width}x${outC.height}, 3 frames)</h3>`;
+
+  colBounds.forEach((b, idx) => {
+    const bbox = getTightBBox(idata, b.x1, b.x2, 0, 388);
+    if (!bbox) return;
+
+    // Standing dog in frame 0 is ~380px tall. We want it to be ~TARGET_BODY_H (310px)
+    const scale = TARGET_BODY_H / 380; // ~0.815
+    const dw = Math.round(bbox.w * scale);
+    const dh = Math.round(bbox.h * scale);
+
+    const pawsFromTop = (bbox.maxY - bbox.minY) * scale;
+    const dy = Math.round(BASELINE_Y - pawsFromTop);
+    const dx = idx * FRAME_W + Math.round((FRAME_W - dw) / 2);
+
+    outCtx.drawImage(rawC, bbox.minX, bbox.minY, bbox.w, bbox.h, dx, dy, dw, dh);
+  });
+
+  card.appendChild(createPreview(outC, 3));
+  return { card, canvas: outC };
+}
+
+// ─────────────────────────────────────────────────────────────
+// 3. Process KICK (5 frames)
+// ─────────────────────────────────────────────────────────────
+async function processKick() {
+  const img = await loadImage('../imgs/attack_kick.jpeg');
+  const rawC = document.createElement('canvas');
+  rawC.width = img.width; rawC.height = img.height;
+  const rawCtx = rawC.getContext('2d');
+  rawCtx.drawImage(img, 0, 0);
+
+  const idata = rawCtx.getImageData(0, 0, img.width, img.height);
+  const px = idata.data;
+  const w = img.width, h = img.height;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const r = px[i], g = px[i+1], b = px[i+2];
+      const isGray = Math.abs(r - g) <= 20 && Math.abs(g - b) <= 20;
+      const matchBg = Math.abs(r - 163) <= 34 && Math.abs(g - 163) <= 34 && Math.abs(b - 161) <= 34;
+      if (isGray && matchBg) {
+        px[i+3] = 0;
+      }
+    }
+  }
+  rawCtx.putImageData(idata, 0, 0);
+
+  const fw = Math.floor(w / 5); // 536
+  const colBounds = [
+    { x1: 0 * fw, x2: 1 * fw },
+    { x1: 1 * fw, x2: 2 * fw },
+    { x1: 2 * fw, x2: 3 * fw },
+    { x1: 3 * fw, x2: 4 * fw },
+    { x1: 4 * fw, x2: 5 * fw },
+  ];
+
+  const outC = document.createElement('canvas');
+  outC.width = FRAME_W * 5;
+  outC.height = FRAME_H;
+  const outCtx = outC.getContext('2d');
+  outCtx.imageSmoothingEnabled = false;
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h3>Normalized attack_kick.png (${outC.width}x${outC.height}, 5 frames)</h3>`;
+
+  colBounds.forEach((b, idx) => {
+    // In kick, avoid outer box border line (inset 15px)
+    const bbox = getTightBBox(idata, b.x1 + 18, b.x2 - 18, 18, h - 18, true);
+    if (!bbox) return;
+
+    // Standing dog in frame 4 (landing) is ~260px tall. We want it ~TARGET_BODY_H
+    const scale = TARGET_BODY_H / 260; // ~1.19
+    const dw = Math.round(bbox.w * scale);
+    const dh = Math.round(bbox.h * scale);
+
+    let dy;
+    if (idx === 0 || idx === 4) {
+      // Ground frames
+      const pawsFromTop = (bbox.maxY - bbox.minY) * scale;
+      dy = Math.round(BASELINE_Y - pawsFromTop);
+    } else {
+      // Mid-air spin frames (elevated by ~50px)
+      dy = Math.round(BASELINE_Y - dh - 35);
+    }
+    const dx = idx * FRAME_W + Math.round((FRAME_W - dw) / 2);
+
+    outCtx.drawImage(rawC, bbox.minX, bbox.minY, bbox.w, bbox.h, dx, dy, dw, dh);
+  });
+
+  card.appendChild(createPreview(outC, 5));
+  return { card, canvas: outC };
+}
+
+function getTightBBox(idata, x1, x2, y1, y2, filterBorder = false) {
+  const px = idata.data;
+  const w = idata.width;
+  let minX = 99999, maxX = -1, minY = 99999, maxY = -1;
+
+  for (let y = y1; y <= y2; y++) {
+    for (let x = x1; x <= x2; x++) {
+      const i = (y * w + x) * 4;
+      const a = px[i+3];
+      if (a > 10) {
+        // If filterBorder is true, ignore straight horizontal/vertical border line pixels
+        if (filterBorder) {
+          const r = px[i], g = px[i+1], b = px[i+2];
+          // Border is dark gray/black line
+          if (r < 60 && g < 60 && b < 60 && (x <= x1 + 25 || x >= x2 - 25 || y <= y1 + 25 || y >= y2 - 25)) {
+            continue;
+          }
+        }
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX || maxY < minY) return null;
+  return { minX, maxX, minY, maxY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
+function createPreview(sourceC, nFrames) {
+  const wrap = document.createElement('div');
+  wrap.className = 'row';
+
+  // 1. Full strip preview
+  const strip = document.createElement('canvas');
+  const s = Math.min(1, 600 / sourceC.width);
+  strip.width = sourceC.width * s;
+  strip.height = sourceC.height * s;
+  const sctx = strip.getContext('2d');
+  sctx.drawImage(sourceC, 0, 0, strip.width, strip.height);
+  wrap.appendChild(strip);
+
+  // 2. Playback canvas
+  const playC = document.createElement('canvas');
+  playC.width = 160; playC.height = 140;
+  const pctx = playC.getContext('2d');
+  pctx.imageSmoothingEnabled = false;
+  wrap.appendChild(playC);
+
+  let tick = 0;
+  setInterval(() => {
+    tick++;
+    const f = Math.floor(tick / 8) % nFrames;
+    pctx.clearRect(0, 0, 160, 140);
+    // Baseline
+    pctx.strokeStyle = '#ff3366';
+    pctx.beginPath();
+    pctx.moveTo(0, 120); pctx.lineTo(160, 120);
+    pctx.stroke();
+
+    // Render scaled down to match game's 112x90
+    pctx.drawImage(sourceC, f * FRAME_W, 0, FRAME_W, FRAME_H, 24, 120 - 90, 112, 90);
+  }, 1000 / 60);
+
+  return wrap;
+}
+
+run();
+</script>
+</body>
+</html>

@@ -15,53 +15,45 @@
 | 平台 | 純前端瀏覽器遊戲，桌面鍵盤操作 |
 | 技術棧 | HTML5 + CSS + 原生 JavaScript + Canvas 2D（**不使用**任何遊戲引擎、不需要打包工具，可直接以瀏覽器開啟） |
 | 畫面解析度 | 960×540（Canvas 內部座標），CSS 不做額外縮放 |
-| 美術風格 | **經典復古像素風格（Pixel Art）**，全面使用 `imgs/` 目錄下的真實像素圖片素材（Soju 4 組動作圖集、主人立繪、3 種小怪、雙型態 Boss、客廳家具平台、運輸籠、裝飾物件與客廳背景），透過 Canvas 2D 的 `drawImage` 渲染（關閉像素平滑 `imageSmoothingEnabled = false` 維持銳利像素感），**徹底廢除**純程式碼手刻網格或幾何拼貼做法。 |
+| 美術風格 | **經典復古像素風格（Pixel Art）**，主角使用 Soju 動作圖集，其餘關卡素材全部使用 `imgs/kenney_pixel-platformer/` 內 Kenney Pixel Platformer 的 CC0 圖集，透過 Canvas 2D 裁切 `Tilemap`、背景圖塊與角色圖塊渲染。 |
 | 音效 | Web Audio API 即時合成音效；**不做背景音樂**（避免第一版太吵），過關畫面播放合成的生日快樂旋律 |
 | 難度取向 | 輕鬆爽快、普通動作遊戲難度，3 顆愛心，一般玩家應能在數次嘗試內破關 |
 | 單局長度 | 正常關卡約 1 分鐘（之後可再擴充關卡長度） |
 
 ### 1.1 故事背景
 
-主人正在餵 Soju 吃零食，氣氛溫馨 → 一名穿著大斗篷、遮住全身的神祕魔王闖入 → 魔王把主人關進狗狗運輸籠 → 魔王帶著運輸籠逃走 → Soju 板著一張臭臉出發尋找主人。玩家操控 Soju 穿越客廳，打倒沿途的家用品小怪，抵達魔王巢穴後，魔王會在過場中脫下斗篷，現出真身：**巨大洗耳液魔王**（帶點獸醫風格的洗耳液瓶怪物）。擊敗魔王後，主人獲救，母女團聚。
+主人正在餵 Soju 吃零食，氣氛溫馨 → 一名穿著大斗篷、遮住全身的神祕魔王闖入 → 魔王把主人關進狗狗運輸籠 → 魔王帶著運輸籠逃走 → Soju 板著一張臭臉出發尋找主人。玩家操控 Soju 穿越戶外草地與樹林，打倒沿途唯一種類的拖鞋敵人，抵達戶外魔王區域後，魔王會在過場中脫下斗篷，現出真身：**巨大洗耳液魔王**（帶點獸醫風格的洗耳液瓶怪物）。擊敗魔王後，主人獲救，母女團聚。
 
 ### 1.2 像素素材規格與角色設定（`imgs/` 資料夾）
 
 專案正式素材目錄為 `imgs/`，遊戲直接讀取此目錄下的像素圖片進行切圖與渲染：
 
-1. **主角 Soju 動作圖集（Spritesheet）**：
-   - `imgs/idle.jpeg`：**待機呼吸**（Idle Breathing，2 幀呼吸循環）
-   - `imgs/run.jpeg`：**奔跑衝刺**（Running，4 幀，前後腳交替奔馳）
-   - `imgs/jump.jpeg`：**跳躍動作**（Jumping，4 幀，起跳、騰空、收腹、落地姿態）
-   - `imgs/bite.jpeg`：**撲咬攻擊**（Bite Attack，4 幀，前撲、張嘴咬合、收招回正）
-   - ★ **三段連招動作圖集（新升級）**：
-     - `imgs/attack_punch.jpg`：**第 1 擊：用手揍（Punch）**（3 幀，903×235 px，直拳連打）
-     - `imgs/attack_head.jpg`：**第 2 擊：用頭頂（Headbutt）**（3 幀，1731×448 px，法鬥頭槌衝擊）
-     - `imgs/attack_kick.jpeg`：**第 3 擊：迴旋踢（Spin Kick / Air Kick）**（5 幀，2680×384 px，大迴旋重踢，可將敵人擊飛超遠）
-   - **圖集規格**：動作圖透過 Chroma Key 自動濾除背景純色。
+1. **主角 Soju 動作分檔 PNG**：
+  - `imgs/soju/idle/frame_01.png`～`frame_02.png`：待機呼吸
+  - `imgs/soju/run/frame_01.png`～`frame_03.png`：奔跑衝刺
+  - `imgs/soju/jump/frame_01.png`：跳躍動作（目前保留 1 幀）
+  - `imgs/soju/attack_head/frame_01.png`：頭鎚攻擊（目前保留 1 幀）
+  - `imgs/soju/attack_punch/frame_01.png`～`frame_02.png`：拳擊攻擊
+  - `imgs/soju/attack_kick/frame_01.png`～`frame_03.png`：迴旋踢與空中飛踢
+  - `imgs/soju/hurt/frame_01.png`：受傷動作
+  - 原始圖集 `imgs/soju.jpeg` 保留作為素材來源；遊戲實際讀取上述分檔 PNG，方便逐幀手動替換。
    - **外觀特徵**：奶油色法鬥犬、標誌性撲克臉/臭臉（眼神半瞇不苟言笑）、幾乎沒有尾巴、身穿多色機能胸背帶（**藍色主帶 + 綠色扣帶 + 紅色卡扣**）、背部配戴一個深藍色隨身小背包。
 2. **主人立繪（`imgs/owner.jpeg`）**：
    - 尺寸為 1074×976 px，像素風格女性角色立繪。
    - 外觀為深棕微捲長髮、白色小背心、卡其色短褲、休閒自然風格。
    - 用於開場 STORY 劇情插圖（被抓進籠子）、結局通關重逢畫面。
-3. **小怪素材（3 種放大像素規格，與主角比例相當）**：
-   - `imgs/slipper.png`：生氣的藍黃拖鞋小怪（巡邏怪，88×58 px）
-   - `imgs/dyson.png`：金屬紫與暗灰衝刺吸塵器怪（衝刺怪，68×88 px）
-   - `imgs/ball.png`：紅白條紋彈跳球怪（垂直彈跳下砸怪，60×60 px）
+3. **敵人素材（目前僅保留 1 種，與主角比例相當）**：
+  - Kenney `tilemap-characters_packed.png`：單一巡邏敵人圖塊
 4. **Boss 與彈幕素材**：
-   - `imgs/boss_cloaked.png`：深紫斗篷神秘怪（過場與登場前型態）
-   - `imgs/boss_revealed.png`：洗耳液魔王（真身，半透明青色藥水瓶身、紅十字標籤、憤怒面孔、滴落觸手足）
+  - Kenney `tilemap-characters_packed.png`：Boss 圖塊、彈幕與震波替代圖塊
    - `imgs/boss_droplet.png`：洗耳液噴射彈幕水滴
    - `imgs/boss_shockwave.png`：魔王跳躍落地之地面衝擊波
 5. **場景平台、裝飾與背景**：
-   - `imgs/bg_livingroom.jpg`：精緻溫馨客廳橫向長幅背景
-   - `imgs/floor.png`：木質地板貼圖（用於地面與平台拼貼）
-   - `imgs/sofa.png`：客廳沙發平台（可跳躍站立）
-   - `imgs/table.png`：茶几平台（放置書本與馬克杯，可跳躍站立）
-   - `imgs/toybox.png`：玩具箱平台（裝滿彩色玩具，可跳躍站立）
+  - Kenney `tilemap-backgrounds_packed.png`：天空、遠景樹林與戶外背景圖塊
+  - Kenney `tilemap_packed.png`：草地、土層、平台、水與樹木圖塊
    - `imgs/cage.png`：狗狗運輸籠（航空箱造型，劇情用）
    - `imgs/decor_bowl.png`：狗碗裝飾
    - `imgs/decor_snack.png`：Soju 零食袋裝飾
-   - `imgs/decor_plant.png`：室內綠意盆栽裝飾
    - `imgs/gate.png`：魔王巢穴石門圖示
 6. **UI 素材**：
    - `imgs/heart_full.png`：實心紅心愛心
@@ -73,9 +65,9 @@
 
 | 輸入 | 行為 | 對應動畫 |
 |---|---|---|
-| `←` / `→` | 左右移動（帶真實加速度與摩擦煞車滑行） | 播放 `run.jpeg` 動畫（面左時水平鏡像翻轉） |
-| `↑` / `W` | 跳躍；**攻擊命中時可跳躍取消（Jump Cancel）** | 播放 `jump.jpeg` 動畫 |
-| `Space`（地面連點） | **三段連招**：用手揍 → 用頭頂 → 迴旋踢 | 依序播放 `attack_punch` → `attack_head` → `attack_kick` |
+| `←` / `→` | 左右移動（帶真實加速度與摩擦煞車滑行） | 播放 `imgs/soju/run/` 動畫（面左時水平鏡像翻轉） |
+| `↑` / `W` | 跳躍；**攻擊命中時可跳躍取消（Jump Cancel）** | 播放 `imgs/soju/jump/` 動畫 |
+| `Space`（地面連點） | **三段連招**：頭鎚 → 用手揍 → 迴旋踢 | 依序播放 `attack_head` → `attack_punch` → `attack_kick` |
 | `Space`（空中） | **空中飛踢（Air Kick）** | 播放 `attack_kick` 動畫 |
 | 無按鍵（靜止） | 原地待機 | 循環播放 `idle.jpeg` 呼吸動畫 |
 
@@ -111,7 +103,7 @@ TITLE  →  STORY(5 幕)  →  LEVEL  →  BOSS_INTRO(現身過場)  →  BOSS  
 |---|---|---|
 | `TITLE` | 標題畫面，顯示遊戲名稱、Soju 像素精靈、"按空白鍵開始" | 按 `Space` → `STORY` |
 | `STORY` | 開場劇情，共 5 幕（見第 7 節），每幕按 `Space` 推進一格 | 第 5 幕再按 `Space` → `LEVEL` |
-| `LEVEL` | 主關卡，橫向捲軸，客廳場景 | 玩家 x 超過 `GATE_X` → `BOSS_INTRO`；愛心歸零 → `LOSE` |
+| `LEVEL` | 主關卡，橫向捲軸，戶外草地與樹林場景 | 玩家 x 超過 `GATE_X` → `BOSS_INTRO`；愛心歸零 → `LOSE` |
 | `BOSS_INTRO` | 固定鏡頭過場：斗篷魔王現身，播放 1～2 句對白，斗篷脫落顯示洗耳液魔王真身 | 過場計時結束或按 `Space` → `BOSS` |
 | `BOSS` | Boss 戰，固定鏡頭（不捲軸）的獨立房間 | 魔王 HP 歸零並播完死亡延遲 → `WIN`；愛心歸零 → `LOSE` |
 | `WIN` | 通關畫面，「母女團聚啦！妍霏生日快樂」，播放生日快樂合成旋律 | **無**（畫面永久停在此，不接受任何按鍵，不可跳出） |
@@ -149,7 +141,7 @@ const STEP = 1000/60;                         // 固定時間步（60fps）
 ## 5. 關卡（Level）設計
 
 ### 5.1 場景主題
-溫馨客廳風格。背景繪製 `imgs/bg_livingroom.jpg`，地板鋪設 `imgs/floor.png`，平台（沙發 `sofa.png`、茶几 `table.png`、玩具箱 `toybox.png`）與裝飾物（狗碗 `decor_bowl.png`、零食袋 `decor_snack.png`、盆栽 `decor_plant.png`）均以獨立像素精靈圖繪製。
+戶外草地與樹林風格。背景以 Kenney `tilemap-backgrounds_packed.png` 拼接天空與遠景，地面、平台、樹木與水坑以 `tilemap_packed.png` 的 18×18 圖塊拼接；不再使用外部照片、客廳家具或室內盆栽。
 
 ### 5.2 平台資料（世界座標）
 
@@ -157,9 +149,6 @@ const STEP = 1000/60;                         // 固定時間步（60fps）
 const PLATFORMS = [
   { x: 0,       y: GROUND_Y, w: PIT_START,             h: 80, sprite: 'floor' },   // 地板 A（到坑洞前）
   { x: PIT_END, y: GROUND_Y, w: LEVEL_WIDTH - PIT_END, h: 80, sprite: 'floor' },   // 地板 B（坑洞後到底）
-  { x: 230,     y: 390,      w: 190,                   h: 70, sprite: 'sofa' },    // 沙發（可站立平台）
-  { x: 480,     y: 410,      w: 120,                   h: 50, sprite: 'table' },   // 茶几
-  { x: 1350,    y: 395,      w: 150,                   h: 65, sprite: 'toybox' },  // 玩具箱
 ];
 ```
 **碰撞規則**：處理「由上往下落地」的單向平台碰撞（允許從側面或下方穿過，僅在玩家腳底接觸平台頂部且下墜時觸發著地），避免卡住邊緣影響流暢度。
@@ -170,8 +159,8 @@ const PLATFORMS = [
 const DECOR = [
   { type: 'decor_bowl',  x: 60,   y: GROUND_Y - 26, w: 40, h: 26 },
   { type: 'decor_snack', x: 150,  y: GROUND_Y - 36, w: 36, h: 36 },
-  { type: 'decor_plant', x: 900,  y: GROUND_Y - 64, w: 48, h: 64 },
-  { type: 'decor_plant', x: 2050, y: GROUND_Y - 64, w: 48, h: 64 },
+  { type: 'tree', x: 760,  y: GROUND_Y - 100, w: 80, h: 100 },
+  { type: 'tree', x: 2200, y: GROUND_Y - 110, w: 88, h: 110 },
   { type: 'gate',        x: GATE_X, y: GROUND_Y - 120, w: 80, h: 120 },
 ];
 ```
@@ -183,15 +172,12 @@ const DECOR = [
 
 | # | 類型 / 圖檔 | x | 移動範圍 / 行為 | 渲染尺寸 (w×h) | 血量 HP | 站立平台 |
 |---|---|---|---|---|---|---|
-| 1 | 拖鞋 `slipper.png` | 120 | 巡邏 [100,320]，主動撲擊 | 88×58 | 3 | 地板 |
-| 2 | 拖鞋 `slipper.png` | 300 | 巡邏 [235,410]，主動撲擊 | 88×58 | 3 | 沙發 |
-| 3 | Dyson `dyson.png` | 600 | 來回衝刺 [560,840]，渦輪狂衝 | 68×88 | 4 | 地板 |
-| 4 | 球球 `ball.png` | 1150 | 原地高空彈跳下砸 | 60×60 | 2 | 地板 |
-| 5 | 拖鞋 `slipper.png` | 1380 | 巡邏 [1355,1490]，主動撲擊 | 88×58 | 3 | 玩具箱 |
-| 6 | Dyson `dyson.png` | 1700 | 來回衝刺 [1650,1950]，渦輪狂衝 | 68×88 | 4 | 地板 |
-| 7 | 球球 `ball.png` | 2050 | 原地高空彈跳下砸 | 60×60 | 2 | 地板 |
-| 8 | 拖鞋 `slipper.png` | 2200 | 巡邏 [2150,2380]，主動撲擊 | 88×58 | 3 | 地板 |
-| 9 | 拖鞋 `slipper.png` | 2950 | 巡邏 [2880,3070]，守門撲擊 | 88×58 | 3 | 地板 |
+| 1 | Kenney 角色圖塊 | 120 | 巡邏 [100,320]，主動撲擊 | 88×58 | 3 | 草地 |
+| 2 | Kenney 角色圖塊 | 600 | 巡邏 [560,840]，主動撲擊 | 88×58 | 3 | 草地 |
+| 3 | Kenney 角色圖塊 | 1150 | 巡邏 [1050,1300]，主動撲擊 | 88×58 | 3 | 草地 |
+| 4 | Kenney 角色圖塊 | 1700 | 巡邏 [1650,1950]，主動撲擊 | 88×58 | 3 | 草地 |
+| 5 | Kenney 角色圖塊 | 2400 | 巡邏 [2300,2550]，主動撲擊 | 88×58 | 3 | 草地 |
+| 6 | Kenney 角色圖塊 | 2950 | 巡邏 [2880,3070]，守門撲擊 | 88×58 | 3 | 草地 |
 
 #### 敵人 AI 攻擊機制與傷害準則
 1. **攻擊前搖與危險警示**：
@@ -225,22 +211,14 @@ ctx.imageSmoothingEnabled = false;
 | `imgs/jump.jpeg` | JPEG | Soju 跳躍動作 Spritesheet（4 幀，2×2 網格） | 玩家離地躍起與滯空動畫 |
 | `imgs/bite.jpeg` | JPEG | Soju 撲咬攻擊 Spritesheet（4 幀，2×2 網格） | 按下空白鍵時的咬擊攻擊動畫 |
 | `imgs/owner.jpeg` | JPEG | 長髮女性主人全身像素立繪 | 開場 STORY 劇情、結局 WIN 團聚插圖 |
-| `imgs/slipper.png` | 透明 PNG | 藍黃配色生氣拖鞋小怪 | 巡邏怪 |
-| `imgs/dyson.png` | 透明 PNG | 金屬紫吸塵器小怪，生氣紅眼 | 衝刺怪 |
-| `imgs/ball.png` | 透明 PNG | 紅白螺旋紋彈跳球小怪 | 彈跳怪 |
-| `imgs/boss_cloaked.png` | 透明 PNG | 深紫兜帽斗篷魔王 | BOSS_INTRO 過場與第一型態 |
-| `imgs/boss_revealed.png` | 透明 PNG | 巨大洗耳液魔王（紅十字、液體觸手足） | Boss 戰本體 |
+| `kenney_pixel-platformer/Tilemap/tilemap-characters_packed.png` | PNG 圖集 | Kenney 角色圖塊 | 敵人、Boss、彈幕 |
 | `imgs/boss_droplet.png` | 透明 PNG | 洗耳液彈幕水滴 | Boss `spray` 彈幕攻擊 |
 | `imgs/boss_shockwave.png` | 透明 PNG | 地面白色衝擊波 | Boss `slam` 震波攻擊 |
-| `imgs/bg_livingroom.jpg` | JPG | 16-bit 復古像素客廳全景背景 | 關卡橫向捲軸背景 |
-| `imgs/floor.png` | 透明 PNG | 溫馨木質地板貼圖 | 關卡地面 |
-| `imgs/sofa.png` | 透明 PNG | 墨綠色復古布沙發平台 | 關卡平台 |
-| `imgs/table.png` | 透明 PNG | 木質茶几平台 | 關卡平台 |
-| `imgs/toybox.png` | 透明 PNG | 彩色玩具收納箱平台 | 關卡平台 |
+| `kenney_pixel-platformer/Tilemap/tilemap-backgrounds_packed.png` | PNG 圖集 | 天空與遠景背景圖塊 | 關卡橫向捲軸背景 |
+| `kenney_pixel-platformer/Tilemap/tilemap_packed.png` | PNG 圖集 | 草地、土層、平台、水與樹木圖塊 | 關卡地面與裝飾 |
 | `imgs/cage.png` | 透明 PNG | 狗狗航空運輸籠 | 劇情關押主人與魔王搬運 |
 | `imgs/decor_bowl.png` | 透明 PNG | 狗食碗 | 裝飾物 |
 | `imgs/decor_snack.png` | 透明 PNG | Soju 最愛肉乾零食袋 | 裝飾物 |
-| `imgs/decor_plant.png` | 透明 PNG | 綠意室內盆栽 | 裝飾物 |
 | `imgs/gate.png` | 透明 PNG | 魔王巢穴大門標示 | 終點提示 |
 | `imgs/heart_full.png` | 透明 PNG | 實心紅心愛心 | HUD 血量 |
 | `imgs/heart_empty.png` | 透明 PNG | 扣血空心灰心 | HUD 血量 |
@@ -282,7 +260,7 @@ ctx.imageSmoothingEnabled = false;
 | 幕 | 畫面演出（使用 imgs/ 素材） | 字幕文字 |
 |---|---|---|
 | 0 | `owner.jpeg` 立繪在左，`decor_snack.png` 零食袋在旁，Soju 待機 | 平凡的一天，主人正在餵Soju吃最愛的零食♪ |
-| 1 | 主人驚訝，畫面右側出現 `boss_cloaked.png` 斗篷魔王現身 | 咦？誰進來了...一團神祕的斗篷身影！ |
+| 1 | 主人驚訝，畫面右側出現 Kenney Boss 角色圖塊 | 咦？誰進來了...一團神祕的斗篷身影！ |
 | 2 | 背景轉暗，主人被關入 `cage.png` 運輸籠中 | 什麼！主人被關進了狗狗運輸籠！ |
 | 3 | 斗篷魔王拖著 `cage.png` 運輸籠往右側大門逃走 | 神祕魔王帶著主人消失在門外... |
 | 4 | Soju 特寫（眼神堅定、臭臉），播放咬擊攻擊動作 | Soju：...哼，我來救你。（按空白鍵開始冒險） |
@@ -300,7 +278,7 @@ ctx.imageSmoothingEnabled = false;
 ```js
 function updateBossIntro(){
   bossIntroTimer++;
-  if(bossIntroTimer === 70) boss.revealed = true; // 斗篷脫落，切換為 boss_revealed.png
+  if(bossIntroTimer === 70) boss.revealed = true; // Boss 進入第二階段
   if(bossIntroTimer > 140 || justPressed.Space) state = 'BOSS';
 }
 ```
@@ -311,7 +289,7 @@ function updateBossIntro(){
 - 三招式循環（避免連續同招）：
   1. `spray`（噴彈幕）：發射 `boss_droplet.png` 洗耳液水滴（共 3 顆），沿固定高度飛向玩家，玩家需起跳閃避。
   2. `slam`（跳躍壓地）：垂直跳起落地，左右發射 `boss_shockwave.png` 地面震波，玩家需跳躍閃避。
-  3. `summon`（召喚小怪）：召喚 1 隻 `slipper.png` 或 `ball.png` 進場。
+  3. `summon`（召喚敵人）：召喚 1 隻 Kenney 敵人角色圖塊進場。
 - 每次招式結束後進入 `recover`（70 frame 虛弱空檔），是近身咬擊的最佳時機。
 - 受到 5 次咬擊後 Boss 被擊倒，場上雜兵彈幕消散，延遲後切換至 `WIN`。
 
@@ -369,7 +347,20 @@ soju_adventure.html
 
 ---
 
-## 12. 測試與驗收標準（Definition of Done）
+## 12. 關卡編輯器
+
+使用 `level_editor.html` 編輯關卡視覺。編輯器只載入 `imgs/kenney_pixel-platformer/` 內的 Kenney CC0 圖集，不使用外部背景圖片。
+
+- **地形**：使用 `tilemap_packed.png` 編輯草地、土層、平台、水坑與場景物件。
+- **背景**：使用 `tilemap-backgrounds_packed.png` 拼接天空、雲層與遠景。
+- **角色**：使用 `tilemap-characters_packed.png` 放置敵人與 Boss 參考圖塊。
+- **操作**：畫筆、橡皮擦、矩形選取移動、區域填滿、平移、縮放、網格開關、復原與重做。選取移動會同步搬動背景、地形與角色三個圖層；按住 Option/Alt 拖曳選取區域時會複製到新位置並保留原區塊。
+- **地圖比例**：預設為 240×20 格，採橫向長關卡；寬度可調整為 40～480 格，高度可調整為 12～40 格。編輯器與遊戲自訂關卡使用 36×36px 顯示格子，Soju 維持原本角色尺寸。
+- **檔案**：可匯出／匯入 JSON；「儲存本機草稿」會寫入瀏覽器 `localStorage` 的 `soju-custom-level`，編輯器重新整理並完成素材載入後會自動讀取該草稿。
+- **遊戲讀取**：遊戲啟動並完成素材載入後，會自動讀取同一個 `soju-custom-level` 草稿；有草稿時使用編輯器的背景、地形與角色圖層，沒有草稿時使用內建關卡。
+- **遊戲物理**：自訂關卡使用垂直鏡頭貼合地圖底部，畫面下緣不留空白；玩家會受到地形側面阻擋，不可穿牆；每次跳躍最多使用一次空中攻擊，落地後重置。
+
+## 13. 測試與驗收標準（Definition of Done）
 
 - [ ] **圖片素材載入**：`imgs/` 中全部 24 個素材皆正常載入，無破圖或報錯。
 - [ ] **去背效果**：Soju 動作圖與主人圖在遊戲中呈現乾淨透明底，無灰色邊框。
@@ -386,7 +377,7 @@ soju_adventure.html
 
 ---
 
-## 13. 附錄 A：像素素材規格表與程式實作範本
+## 14. 附錄 A：像素素材規格表與程式實作範本
 
 ### A.1 Spritesheet 切圖座標常數定義
 
@@ -508,24 +499,16 @@ class AssetLoader {
       this.loadWithChromaKey('owner', 'imgs/owner.jpeg', [123, 123, 123]),
 
       // 2. 敵人與 Boss
-      this.loadImage('slipper', 'imgs/slipper.png'),
-      this.loadImage('dyson', 'imgs/dyson.png'),
-      this.loadImage('ball', 'imgs/ball.png'),
-      this.loadImage('boss_cloaked', 'imgs/boss_cloaked.png'),
-      this.loadImage('boss_revealed', 'imgs/boss_revealed.png'),
+      this.loadImage('kenney_tiles', 'imgs/kenney_pixel-platformer/Tilemap/tilemap_packed.png'),
+      this.loadImage('kenney_backgrounds', 'imgs/kenney_pixel-platformer/Tilemap/tilemap-backgrounds_packed.png'),
+      this.loadImage('kenney_characters', 'imgs/kenney_pixel-platformer/Tilemap/tilemap-characters_packed.png'),
       this.loadImage('boss_droplet', 'imgs/boss_droplet.png'),
       this.loadImage('boss_shockwave', 'imgs/boss_shockwave.png'),
 
       // 3. 場景、平台與裝飾
-      this.loadImage('bg_livingroom', 'imgs/bg_livingroom.jpg'),
-      this.loadImage('floor', 'imgs/floor.png'),
-      this.loadImage('sofa', 'imgs/sofa.png'),
-      this.loadImage('table', 'imgs/table.png'),
-      this.loadImage('toybox', 'imgs/toybox.png'),
       this.loadImage('cage', 'imgs/cage.png'),
       this.loadImage('decor_bowl', 'imgs/decor_bowl.png'),
       this.loadImage('decor_snack', 'imgs/decor_snack.png'),
-      this.loadImage('decor_plant', 'imgs/decor_plant.png'),
       this.loadImage('gate', 'imgs/gate.png'),
 
       // 4. UI
@@ -583,7 +566,7 @@ function drawSimpleImage(ctx, img, dx, dy, dw, dh, flipX = false) {
 
 ---
 
-## 14. 建議開發順序（任務拆分）
+## 15. 建議開發順序（任務拆分）
 
 1. **基礎建設與載入器**：建置 HTML/Canvas 與 `AssetLoader`，實作 Chroma Key 去背與全量素材載入。
 2. **玩家精靈渲染與動作切換**：
@@ -591,15 +574,15 @@ function drawSimpleImage(ctx, img, dx, dy, dw, dh, flipX = false) {
    - 依玩家狀態（待機、跑動、跳躍、咬擊）切換動畫幀與翻轉方向；
    - 實作左右移動、重力、跳躍物理與單向平台著地。
 3. **關卡平台、裝飾物與坑洞**：
-   - 繪製客廳背景 `bg_livingroom.jpg`、地板 `floor.png`、沙發 `sofa.png`、茶几 `table.png`、玩具箱 `toybox.png`；
+  - 使用 Kenney `tilemap-backgrounds_packed.png` 拼接戶外背景，使用 `tilemap_packed.png` 拼接地面、平台、樹木與水坑；
    - 加入黑暗玩具坑摔落扣血與重生機制；
    - 實作平滑鏡像捲軸攝影機跟隨。
 4. **敵人系統與撲咬攻擊**：
-   - 繪製 `slipper.png`、`dyson.png`、`ball.png`；
+  - 從 Kenney `tilemap-characters_packed.png` 繪製唯一敵人；
    - 建立拖鞋巡邏、Dyson 衝刺、彈跳球行為 AI；
    - 實作咬擊攻擊判定（Hitbox）與打擊音效、受傷閃爍無敵時間。
 5. **Boss 戰與現身過場**：
-   - 實作 `BOSS_INTRO` 過場（`boss_cloaked.png` 斗篷脫落顯示 `boss_revealed.png` 真身）；
+  - 實作 `BOSS_INTRO` 過場（Kenney Boss 角色圖塊進入第二階段）；
    - 實作 Boss 3 種攻擊招式狀態機（彈幕 `boss_droplet.png`、地面震波 `boss_shockwave.png`、召喚小怪）。
 6. **開場劇情與結尾**：
    - 結合 `owner.jpeg` 主人立繪、`cage.png` 與 Soju 動作圖製作 5 幕開場劇情；

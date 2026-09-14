@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Soju 大冒險 | Soju's Adventure</title>
-  <meta name="description" content="控制法鬥犬 Soju 穿越客廳、打倒小怪、救出主人的橫向捲軸像素動作遊戲！">
+  <meta name="description" content="控制法鬥犬 Soju 穿越戶外草地、打倒敵人、救出主人的橫向捲軸像素動作遊戲！">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@700;900&display=swap');
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -113,49 +113,40 @@ const ATTACK_ACTIVE = 12;
 const ATTACK_COOLDOWN = 22;
 const HURT_IFRAMES = 80;
 
-// Spritesheet 切圖座標
-// ★ 關鍵修正：上排(sy=125, sh=365)與下排(sy=555, sh=365) 統一相同 sh，
-//   消除上/下排高度差導致幀之間角色大小不一的視覺問題。
+// 統一 soju.jpeg（1024×1024，前兩列 4 幀、後三列 3 幀，灰底）切圖。
+// 4 幀列寬 256px；3 幀列寬約 341px，不能共用同一組 sx/sw。
+const SOJU_FOUR_FRAME_W = 256;
+const SOJU_THREE_FRAME_W = 341;
+function sojuAnim(dur, sy, sxList, frameWidth, frameHeight, loop = true) {
+  return {
+    dur, loop,
+    frames: sxList.map(sx => ({ sx, sy, sw: frameWidth, sh: frameHeight })),
+  };
+}
+function sojuAnimFrames(dur, frames, loop = true) {
+  return { dur, loop, frames };
+}
 const SOJU_FRAMES = {
-  idle: { dur: 16, frames: [
-    { sx: 60,  sy: 125, sw: 440, sh: 365 }, // 挺胸呼吸起（上排左）
-    { sx: 580, sy: 125, sw: 440, sh: 365 }, // 平穩呼吸伏（上排右）
-  ]},
-  run: { dur: 7, frames: [
-    { sx: 40,  sy: 125, sw: 460, sh: 365 }, // 跑步 F1（上排左）
-    { sx: 560, sy: 125, sw: 460, sh: 365 }, // 跑步 F2（上排右）
-    { sx: 40,  sy: 555, sw: 460, sh: 365 }, // 跑步 F3（下排左，sh 統一 365）
-    { sx: 560, sy: 555, sw: 460, sh: 365 }, // 跑步 F4（下排右，sh 統一 365）
-  ]},
-  jump: { dur: 9, frames: [
-    { sx: 40,  sy: 125, sw: 460, sh: 365 },
-    { sx: 560, sy: 125, sw: 460, sh: 365 },
-    { sx: 40,  sy: 555, sw: 460, sh: 365 },
-    { sx: 560, sy: 555, sw: 460, sh: 365 },
-  ]},
-  attack_punch: { dur: 4, frames: [
-    { sx: 0,   sy: 0, sw: 301, sh: 235 },
-    { sx: 301, sy: 0, sw: 301, sh: 235 },
-    { sx: 602, sy: 0, sw: 301, sh: 235 },
-  ]},
-  attack_head: { dur: 4, frames: [
-    { sx: 0,    sy: 0, sw: 577, sh: 448 },
-    { sx: 577,  sy: 0, sw: 577, sh: 448 },
-    { sx: 1154, sy: 0, sw: 577, sh: 448 },
-  ]},
-  attack_kick: { dur: 3, frames: [
-    { sx: 0,    sy: 0, sw: 536, sh: 384 },
-    { sx: 536,  sy: 0, sw: 536, sh: 384 },
-    { sx: 1072, sy: 0, sw: 536, sh: 384 },
-    { sx: 1608, sy: 0, sw: 536, sh: 384 },
-    { sx: 2144, sy: 0, sw: 536, sh: 384 },
-  ]},
-  bite: { dur: 4, frames: [
-    { sx: 40,  sy: 125, sw: 460, sh: 365 },
-    { sx: 560, sy: 125, sw: 460, sh: 365 },
-    { sx: 40,  sy: 555, sw: 460, sh: 365 },
-    { sx: 560, sy: 555, sw: 460, sh: 365 },
-  ]},
+  idle:         sojuAnim(16,   0, [0, 256], SOJU_FOUR_FRAME_W, 205),
+  run:          sojuAnim(7,  205, [0, 256, 512], SOJU_FOUR_FRAME_W, 205),
+  jump:         sojuAnimFrames(8, [{ sx: 0, sy: 0, sw: 1, sh: 1 }], false),
+  // 頭鎚第三幀是頭部前伸的重擊姿勢，必須在一次攻擊期間播放到。
+  attack_head:  sojuAnimFrames(4, [{ sx: 20, sy: 430, sw: 246, sh: 184 }], false),
+  attack_punch: sojuAnimFrames(7, [
+    { sx: 20, sy: 614, sw: 255, sh: 205 },
+    { sx: 270, sy: 614, sw: 250, sh: 205 },
+  ], false),
+  attack_kick:  sojuAnimFrames(10, [
+    { sx: 10, sy: 839, sw: 230, sh: 185 },
+    { sx: 285, sy: 839, sw: 190, sh: 185 },
+    { sx: 530, sy: 850, sw: 160, sh: 174 },
+  ], false),
+  hurt:         sojuAnimFrames(12, [{ sx: 10, sy: 839, sw: 230, sh: 185 }], false),
+  bite:         sojuAnimFrames(6, [
+    { sx: 20, sy: 430, sw: 246, sh: 184 },
+    { sx: 317, sy: 430, sw: 223, sh: 184 },
+    { sx: 594, sy: 471, sw: 296, sh: 143 },
+  ]),
 };
 const OWNER_FRAME = { sx: 410, sy: 30, sw: 280, sh: 890 };
 
@@ -164,7 +155,20 @@ const OWNER_FRAME = { sx: 410, sy: 30, sw: 280, sh: 890 };
 // ═══════════════════════════════════════════════════════════
 const assets = {};
 let assetsLoaded = 0;
-const TOTAL_ASSETS = 27;
+const SOJU_ACTION_FRAME_COUNTS = {
+  idle: 2, run: 3, jump: 1, attack_head: 1, attack_punch: 2, attack_kick: 3, hurt: 1,
+};
+const TOTAL_ASSETS = 28;
+const KENNEY_TILE_SIZE = 18;
+const KENNEY_BACKGROUND_TILE_SIZE = 24;
+const KENNEY_CHARACTER_TILE_SIZE = 24;
+const CUSTOM_LEVEL_TILE_SIZE = 36;
+let customLevel = null;
+let customPlatforms = [];
+let activeLevelWidth = LEVEL_WIDTH;
+let activeGateX = GATE_X;
+let activeGroundY = GROUND_Y;
+let cameraY = 0;
 
 function updateLoadingBar() {
   assetsLoaded++;
@@ -207,35 +211,43 @@ function loadWithChromaKey(name, src, targetBg, tol = 26) {
 }
 
 async function loadAllAssets() {
+  const sojuFrameLoads = Object.entries(SOJU_ACTION_FRAME_COUNTS).flatMap(([action, count]) =>
+    Array.from({ length: count }, (_, index) => {
+      const frame = String(index + 1).padStart(2, '0');
+      return loadImage(`soju_${action}_${index + 1}`, `imgs/soju/${action}/frame_${frame}.png`);
+    })
+  );
   await Promise.all([
-    loadWithChromaKey('idle',         'imgs/idle.jpeg',         [135,135,135]),
-    loadWithChromaKey('run',          'imgs/run.jpeg',          [133,133,133]),
-    loadWithChromaKey('jump',         'imgs/jump.jpeg',         [129,129,129]),
-    loadWithChromaKey('bite',         'imgs/bite.jpeg',         [124,124,124]),
-    loadWithChromaKey('attack_punch', 'imgs/attack_punch.jpg',  [119,119,119], 32),
-    loadWithChromaKey('attack_head',  'imgs/attack_head.jpg',   [116,116,116], 32),
-    loadWithChromaKey('attack_kick',  'imgs/attack_kick.jpeg',  [163,163,161], 32),
     loadWithChromaKey('owner',        'imgs/owner.jpeg',        [123,123,123]),
-    loadImage('slipper',       'imgs/slipper.png'),
-    loadImage('dyson',         'imgs/dyson.png'),
-    loadImage('ball',          'imgs/ball.png'),
-    loadImage('boss_cloaked',  'imgs/boss_cloaked.png'),
-    loadImage('boss_revealed', 'imgs/boss_revealed.png'),
-    loadImage('boss_droplet',  'imgs/boss_droplet.png'),
-    loadImage('boss_shockwave','imgs/boss_shockwave.png'),
-    loadImage('bg_livingroom', 'imgs/bg_livingroom.jpg'),
-    loadImage('floor',         'imgs/floor.png'),
-    loadImage('sofa',          'imgs/sofa.png'),
-    loadImage('table',         'imgs/table.png'),
-    loadImage('toybox',        'imgs/toybox.png'),
+    loadImage('kenney_tiles',       'imgs/kenney_pixel-platformer/Tilemap/tilemap_packed.png'),
+    loadImage('kenney_backgrounds', 'imgs/kenney_pixel-platformer/Tilemap/tilemap-backgrounds_packed.png'),
+    loadImage('kenney_characters',  'imgs/kenney_pixel-platformer/Tilemap/tilemap-characters_packed.png'),
     loadImage('cage',          'imgs/cage.png'),
-    loadImage('decor_bowl',    'imgs/decor_bowl.png'),
-    loadImage('decor_snack',   'imgs/decor_snack.png'),
-    loadImage('decor_plant',   'imgs/decor_plant.png'),
-    loadImage('gate',          'imgs/gate.png'),
     loadImage('heart_full',    'imgs/heart_full.png'),
     loadImage('heart_empty',   'imgs/heart_empty.png'),
+    loadImage('scene01',       'imgs/scene01.jpg'),
+    loadImage('scene02',       'imgs/scene02.jpeg'),
+    loadImage('scene03',       'imgs/scene03.jpeg'),
+    loadImage('scene04',       'imgs/scene04.jpeg'),
+    loadImage('scene05',       'imgs/scene05.jpeg'),
+    loadImage('scene06',       'imgs/scene06.jpeg'),
+    ...sojuFrameLoads,
   ]);
+}
+
+function sojuFrameImage(action, frameIndex) {
+  const sourceAction = action === 'bite' ? 'attack_head' : action;
+  const frameCount = SOJU_ACTION_FRAME_COUNTS[sourceAction] || 1;
+  return assets[`soju_${sourceAction}_${(frameIndex % frameCount) + 1}`];
+}
+
+function drawSojuFrame(action, frameIndex, dx, dy, anchorW, targetH, flipX = false) {
+  const img = sojuFrameImage(action, frameIndex);
+  if (!img) return;
+  const drawH = targetH;
+  const drawW = drawH * (img.width / img.height);
+  const drawX = flipX ? dx + anchorW - drawW : dx;
+  drawImg(img, drawX, dy, drawW, drawH, flipX);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -344,37 +356,143 @@ function drawImg(img, dx, dy, dw, dh, flipX = false) {
   ctx.restore();
 }
 
+function drawKenneyTile(sheet, tileIndex, dx, dy, scale = 1) {
+  if (!sheet) return;
+  const columns = sheet.width / KENNEY_TILE_SIZE;
+  const sx = (tileIndex % columns) * KENNEY_TILE_SIZE;
+  const sy = Math.floor(tileIndex / columns) * KENNEY_TILE_SIZE;
+  ctx.drawImage(sheet, sx, sy, KENNEY_TILE_SIZE, KENNEY_TILE_SIZE,
+    Math.round(dx), Math.round(dy), KENNEY_TILE_SIZE * scale, KENNEY_TILE_SIZE * scale);
+}
+
+function drawKenneyBackgroundTile(tileIndex, dx, dy) {
+  const sheet = assets['kenney_backgrounds'];
+  if (!sheet) return;
+  const columns = sheet.width / KENNEY_BACKGROUND_TILE_SIZE;
+  const sx = (tileIndex % columns) * KENNEY_BACKGROUND_TILE_SIZE;
+  const sy = Math.floor(tileIndex / columns) * KENNEY_BACKGROUND_TILE_SIZE;
+  ctx.drawImage(sheet, sx, sy, KENNEY_BACKGROUND_TILE_SIZE, KENNEY_BACKGROUND_TILE_SIZE,
+    Math.round(dx), Math.round(dy), KENNEY_BACKGROUND_TILE_SIZE, KENNEY_BACKGROUND_TILE_SIZE);
+}
+
+function drawKenneyCharacterTile(tileIndex, dx, dy, dw, dh, flipX = false) {
+  const sheet = assets['kenney_characters'];
+  if (!sheet) return;
+  const sx = (tileIndex % 9) * KENNEY_CHARACTER_TILE_SIZE;
+  const sy = Math.floor(tileIndex / 9) * KENNEY_CHARACTER_TILE_SIZE;
+  ctx.save();
+  if (flipX) {
+    ctx.translate(Math.round(dx + dw), Math.round(dy));
+    ctx.scale(-1, 1);
+    ctx.drawImage(sheet, sx, sy, KENNEY_CHARACTER_TILE_SIZE, KENNEY_CHARACTER_TILE_SIZE, 0, 0, dw, dh);
+  } else {
+    ctx.drawImage(sheet, sx, sy, KENNEY_CHARACTER_TILE_SIZE, KENNEY_CHARACTER_TILE_SIZE,
+      Math.round(dx), Math.round(dy), dw, dh);
+  }
+  ctx.restore();
+}
+
+function drawCustomTile(sheetName, tileIndex, dx, dy) {
+  if (!tileIndex) return;
+  const sheet = assets[sheetName];
+  const size = sheetName === 'kenney_backgrounds' ? KENNEY_BACKGROUND_TILE_SIZE : KENNEY_TILE_SIZE;
+  const columns = Math.floor(sheet.width / size);
+  const index = tileIndex - 1;
+  const sx = (index % columns) * size;
+  const sy = Math.floor(index / columns) * size;
+  ctx.drawImage(sheet, sx, sy, size, size, Math.round(dx), Math.round(dy), CUSTOM_LEVEL_TILE_SIZE, CUSTOM_LEVEL_TILE_SIZE);
+}
+
+function loadCustomLevel() {
+  const saved = localStorage.getItem('soju-custom-level');
+  if (!saved) return false;
+  try {
+    const candidate = JSON.parse(saved);
+    if (!candidate || !Number.isInteger(candidate.width) || !Number.isInteger(candidate.height) || !candidate.layers) return false;
+    const total = candidate.width * candidate.height;
+    if (!Array.isArray(candidate.layers.tiles) || candidate.layers.tiles.length !== total) return false;
+    if (!Array.isArray(candidate.layers.backgrounds) || candidate.layers.backgrounds.length !== total) candidate.layers.backgrounds = Array(total).fill(0);
+    if (!Array.isArray(candidate.layers.characters) || candidate.layers.characters.length !== total) candidate.layers.characters = Array(total).fill(0);
+    customLevel = candidate;
+    activeLevelWidth = customLevel.width * CUSTOM_LEVEL_TILE_SIZE;
+    activeGroundY = customLevel.height * CUSTOM_LEVEL_TILE_SIZE;
+    activeGateX = Math.max(W + 80, activeLevelWidth - 120);
+    customPlatforms = [];
+    for (let row = 0; row < customLevel.height; row++) {
+      let start = -1;
+      for (let col = 0; col <= customLevel.width; col++) {
+        const occupied = col < customLevel.width && customLevel.layers.tiles[row * customLevel.width + col] > 0;
+        if (occupied && start < 0) start = col;
+        if ((!occupied || col === customLevel.width) && start >= 0) {
+          customPlatforms.push({
+            x: start * CUSTOM_LEVEL_TILE_SIZE,
+            y: row * CUSTOM_LEVEL_TILE_SIZE,
+            w: (col - start) * CUSTOM_LEVEL_TILE_SIZE,
+            h: CUSTOM_LEVEL_TILE_SIZE,
+            sprite: 'custom'
+          });
+          start = -1;
+        }
+      }
+    }
+    return true;
+  } catch (error) {
+    console.warn('Failed to load custom level:', error);
+    return false;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════
 // 5. 關卡資料
 // ═══════════════════════════════════════════════════════════
 const PLATFORMS = [
   { x: 0,       y: GROUND_Y, w: PIT_START,             h: 80, sprite: 'floor' },
   { x: PIT_END, y: GROUND_Y, w: LEVEL_WIDTH - PIT_END, h: 80, sprite: 'floor' },
-  { x: 230,     y: 390,      w: 190, h: 70, sprite: 'sofa' },
-  { x: 480,     y: 410,      w: 120, h: 50, sprite: 'table' },
-  { x: 1350,    y: 395,      w: 150, h: 65, sprite: 'toybox' },
+  { x: 300,     y: 390,      w: 144, h: 18, sprite: 'kenney' },
+  { x: 1180,    y: 370,      w: 162, h: 18, sprite: 'kenney' },
+  { x: 2020,    y: 400,      w: 126, h: 18, sprite: 'kenney' },
 ];
 
 const DECOR_DEFS = [
-  { type: 'decor_bowl',  x: 60,     y: GROUND_Y - 26, w: 40,  h: 26  },
-  { type: 'decor_snack', x: 150,    y: GROUND_Y - 36, w: 36,  h: 36  },
-  { type: 'decor_plant', x: 900,    y: GROUND_Y - 64, w: 48,  h: 64  },
-  { type: 'decor_plant', x: 2050,   y: GROUND_Y - 64, w: 48,  h: 64  },
-  { type: 'decor_plant', x: 2700,   y: GROUND_Y - 64, w: 48,  h: 64  },
-  { type: 'gate',        x: GATE_X, y: GROUND_Y - 120, w: 80, h: 120 },
+  { type: 'tree',        x: 180,    y: GROUND_Y - 108, w: 90,  h: 108 },
+  { type: 'tree',        x: 760,    y: GROUND_Y - 90,  w: 72,  h: 90 },
+  { type: 'tree',        x: 1450,   y: GROUND_Y - 126, w: 108, h: 126 },
+  { type: 'tree',        x: 2200,   y: GROUND_Y - 108, w: 90,  h: 108 },
+  { type: 'tree',        x: 2780,   y: GROUND_Y - 126, w: 108, h: 126 },
+  { type: 'gate',        x: GATE_X, y: GROUND_Y - 72,  w: 72,  h: 72 },
 ];
 
 function makeEnemyDefs() {
+  const EH = 58, EW = 88;
+  if (customLevel && customLevel.layers && customLevel.layers.characters) {
+    const enemies = [];
+    const charLayer = customLevel.layers.characters;
+    for (let row = 0; row < customLevel.height; row++) {
+      for (let col = 0; col < customLevel.width; col++) {
+        const charIdx = charLayer[row * customLevel.width + col];
+        if (charIdx > 0) {
+          const ex = col * CUSTOM_LEVEL_TILE_SIZE;
+          const groundY = (row + 1) * CUSTOM_LEVEL_TILE_SIZE;
+          const ey = groundY - EH; // 腳底對齊格子底部
+          enemies.push({
+            type: 'slipper',
+            x: ex, y: ey, w: EW, h: EH,
+            dir: 1, range: [ex - 100, ex + 100],
+            speed: 1.3, pause: 0, baseY: ey,
+            hp: 3, maxHp: 3
+          });
+        }
+      }
+    }
+    return enemies;
+  }
   return [
-    { type:'slipper', x:120,  y:GROUND_Y-58, w:88, h:58, dir:1, range:[100, 320],  speed:1.3, pause:0, baseY:GROUND_Y-58, hp:3, maxHp:3 },
-    { type:'slipper', x:300,  y:390-58,      w:88, h:58, dir:1, range:[235, 410],  speed:1.3, pause:0, baseY:390-58,      hp:3, maxHp:3 },
-    { type:'dyson',   x:600,  y:GROUND_Y-88, w:68, h:88, dir:1, range:[560, 840],  speed:3.9, pause:0, baseY:GROUND_Y-88, hp:4, maxHp:4 },
-    { type:'ball',    x:1150, y:GROUND_Y-60, w:60, h:60, vy:0,                              baseY:GROUND_Y-60,      hp:2, maxHp:2 },
-    { type:'slipper', x:1380, y:395-58,      w:88, h:58, dir:1, range:[1355,1490], speed:1.3, pause:0, baseY:395-58,      hp:3, maxHp:3 },
-    { type:'dyson',   x:1700, y:GROUND_Y-88, w:68, h:88, dir:1, range:[1650,1950], speed:3.9, pause:0, baseY:GROUND_Y-88, hp:4, maxHp:4 },
-    { type:'ball',    x:2050, y:GROUND_Y-60, w:60, h:60, vy:0,                              baseY:GROUND_Y-60,      hp:2, maxHp:2 },
-    { type:'slipper', x:2200, y:GROUND_Y-58, w:88, h:58, dir:1, range:[2150,2380], speed:1.3, pause:0, baseY:GROUND_Y-58, hp:3, maxHp:3 },
-    { type:'slipper', x:2950, y:GROUND_Y-58, w:88, h:58, dir:1, range:[2880,3070], speed:1.3, pause:0, baseY:GROUND_Y-58, hp:3, maxHp:3 },
+    { type:'slipper', x:120,  y:activeGroundY-EH, w:EW, h:EH, dir:1, range:[100, 320],  speed:1.3, pause:0, baseY:activeGroundY-EH, hp:3, maxHp:3 },
+    { type:'slipper', x:600,  y:activeGroundY-EH, w:EW, h:EH, dir:1, range:[560, 840],  speed:1.3, pause:0, baseY:activeGroundY-EH, hp:3, maxHp:3 },
+    { type:'slipper', x:1150, y:activeGroundY-EH, w:EW, h:EH, dir:1, range:[1050,1300], speed:1.3, pause:0, baseY:activeGroundY-EH, hp:3, maxHp:3 },
+    { type:'slipper', x:1700, y:activeGroundY-EH, w:EW, h:EH, dir:1, range:[1650,1950], speed:1.3, pause:0, baseY:activeGroundY-EH, hp:3, maxHp:3 },
+    { type:'slipper', x:2400, y:activeGroundY-EH, w:EW, h:EH, dir:1, range:[2300,2550], speed:1.3, pause:0, baseY:activeGroundY-EH, hp:3, maxHp:3 },
+    { type:'slipper', x:2950, y:activeGroundY-EH, w:EW, h:EH, dir:1, range:[2880,3070], speed:1.3, pause:0, baseY:activeGroundY-EH, hp:3, maxHp:3 },
   ];
 }
 
@@ -481,7 +599,7 @@ const InputBuffer = {
   }
 };
 
-// 6.5 招式定義庫 (Punch, Headbutt, Kick & Air Kick)
+// 6.5 招式定義庫 (Headbutt, Punch, Kick & Air Kick)
 const ATTACK_TYPES = {
   PUNCH: {
     id: 'punch',
@@ -788,7 +906,7 @@ let winTick = 0;
 
 function makePlayer() {
   return {
-    x: 60, y: GROUND_Y - PLAYER_HIT_H,
+    x: 60, y: activeGroundY - PLAYER_HIT_H - 100,
     vx: 0, vy: 0,
     onGround: false,
     facing: 1, // 1=right, -1=left
@@ -797,6 +915,7 @@ function makePlayer() {
     attackFrames: 0,
     attackCooldown: 0,
     attackMove: null,         // 當前發動的招式 (ATTACK_TYPES)
+    airAttackUsed: false,
     attackHasHit: false,      // 本次攻擊判定是否已成功命中
     jumpCancelable: false,    // 是否可跳躍取消
     canComboCancel: false,    // 是否可連招取消
@@ -827,14 +946,21 @@ function makeBoss() {
 
 function resetLevel() {
   player = makePlayer();
+  if (customLevel) {
+    player.x = W / 2 - PLAYER_HIT_W / 2;
+    player.y = H * 0.2;
+  }
   enemies = makeEnemyDefs().map(d => Object.assign({
     alive: true,
     animTick: 0,
     hitStun: 0,
     hitstopTimer: 0,
     flashTimer: 0,
+    vx: 0,
+    vy: 0,
     kbVx: 0,
     kbVy: 0,
+    onGround: false,
     hpBarTimer: 0,
     deathLaunched: false,
     deathTimer: 0,
@@ -844,13 +970,13 @@ function resetLevel() {
     attackPhase: 'none',
     attackTimer: 0,
     isAttacking: false,
-    vx: 0,
   }, d));
   projectiles = [];
   shockwaves = [];
   boss = null;
   killCount = 0;
   cameraX = 0;
+  cameraY = 0;
   birthdayPlayed = false;
   InputBuffer.clear();
 }
@@ -865,15 +991,32 @@ function aabb(ax, ay, aw, ah, bx, by, bw, bh) {
 function platformLand(p) {
   if (p.vy < 0) return;
   const px = p.x, py = p.y + PLAYER_HIT_H;
-  for (const plat of PLATFORMS) {
+  const platforms = customLevel ? customPlatforms : PLATFORMS;
+  for (const plat of platforms) {
     if (px + PLAYER_HIT_W > plat.x && px < plat.x + plat.w) {
       const prevBottom = py - p.vy;
       if (prevBottom <= plat.y && py >= plat.y) {
         p.y = plat.y - PLAYER_HIT_H;
         p.vy = 0;
         p.onGround = true;
+        p.airAttackUsed = false;
         return;
       }
+    }
+  }
+}
+
+function resolveHorizontalCollisions(p, previousX) {
+  const platforms = customLevel ? customPlatforms : PLATFORMS;
+  for (const plat of platforms) {
+    const overlapsY = p.y < plat.y + plat.h && p.y + PLAYER_HIT_H > plat.y;
+    if (!overlapsY) continue;
+    if (p.vx > 0 && previousX + PLAYER_HIT_W <= plat.x && p.x + PLAYER_HIT_W > plat.x) {
+      p.x = plat.x - PLAYER_HIT_W;
+      p.vx = 0;
+    } else if (p.vx < 0 && previousX >= plat.x + plat.w && p.x < plat.x + plat.w) {
+      p.x = plat.x + plat.w;
+      p.vx = 0;
     }
   }
 }
@@ -933,22 +1076,24 @@ function updatePlayer() {
   } else if (p.onGround && wantsJump && p.attackFrames <= 0) {
     p.vy = JUMP_V;
     p.onGround = false;
+    p.airAttackUsed = false;
     InputBuffer.consume('jump');
     SFX.jump();
   }
 
-  // 2. 攻擊判定與連招取消 (Combo Cancel: 用手揍 -> 用頭頂 -> 迴旋踢)
+  // 2. 攻擊判定與連招取消 (Combo Cancel: 用頭頂 -> 用手揍 -> 迴旋踢)
   const canNormalAttack = p.attackFrames <= 0 && p.attackCooldown <= 0;
   const canComboCancel = p.attackFrames > 0 && p.attackHasHit && p.canComboCancel;
 
-  if (wantsAttack && (canNormalAttack || canComboCancel)) {
+  if (wantsAttack && (canNormalAttack || canComboCancel) && (p.onGround || !p.airAttackUsed)) {
     InputBuffer.consume('attack');
 
     let chosenMove = null;
-    if (!p.onGround) {
+    if (!p.onGround && !p.airAttackUsed) {
       // 空中飛踢 (Aerial Kick)：給予向上滯空懸浮力，維持空中連段
       chosenMove = ATTACK_TYPES.AERIAL;
       p.vy = Math.min(p.vy, -2.8);
+      p.airAttackUsed = true;
     } else if (p.comboStage === 2 || isHoldingUp) {
       // 第三擊（或按住上）：迴旋踢 (Spin Kick) - 敵人會飛比較遠！
       chosenMove = ATTACK_TYPES.KICK;
@@ -956,17 +1101,17 @@ function updatePlayer() {
       p.comboTimer = 0;
       p.vx = p.facing * 3.2; // 迴旋踢向前大踏步衝刺
     } else if (p.comboStage === 1) {
-      // 第二擊：用頭頂 (Headbutt)
-      chosenMove = ATTACK_TYPES.HEAD;
+      // 第二擊：用手揍 (Punch)
+      chosenMove = ATTACK_TYPES.PUNCH;
       p.comboStage = 2;
       p.comboTimer = 28;
-      p.vx = p.facing * 2.2; // 頭頂前頂位移
+      p.vx = p.facing * 1.5;
     } else {
-      // 第一擊：用手揍 (Punch)
-      chosenMove = ATTACK_TYPES.PUNCH;
+      // 第一擊：用頭頂 (Headbutt)
+      chosenMove = ATTACK_TYPES.HEAD;
       p.comboStage = 1;
       p.comboTimer = 24;
-      p.vx = p.facing * 1.5; // 出拳向前踏步
+      p.vx = p.facing * 2.2; // 頭頂前頂位移
     }
 
     p.attackMove = chosenMove;
@@ -1001,28 +1146,50 @@ function updatePlayer() {
 
   // 物理
   p.vy += GRAVITY;
+  const previousX = p.x;
   p.x += p.vx;
   p.y += p.vy;
+  resolveHorizontalCollisions(p, previousX);
 
   // 邊界
-  p.x = Math.max(0, Math.min(LEVEL_WIDTH - PLAYER_HIT_W, p.x));
+  p.x = Math.max(0, Math.min(activeLevelWidth - PLAYER_HIT_W, p.x));
 
   // 平台碰撞
   p.onGround = false;
-  if (p.y + PLAYER_HIT_H > GROUND_Y) {
+  if (p.y + PLAYER_HIT_H > activeGroundY) {
     // 黑暗玩具坑
     const centerX = p.x + PLAYER_HIT_W / 2;
     if (centerX > PIT_START && centerX < PIT_END) {
       // 掉坑
       hurtPlayer();
-      p.x = PIT_START - 50;
-      p.y = GROUND_Y - PLAYER_HIT_H;
+      // 尋找左側最近安全點
+      let safeX = 0;
+      if (customLevel) {
+        // 從玩家當前位置往左掃描，找有地的地方
+        for (let col = Math.floor(p.x / CUSTOM_LEVEL_TILE_SIZE); col >= 0; col--) {
+          let foundCol = false;
+          for (let row = 0; row < customLevel.height; row++) {
+            if (customLevel.layers.tiles[row * customLevel.width + col] > 0) {
+              safeX = col * CUSTOM_LEVEL_TILE_SIZE;
+              p.y = row * CUSTOM_LEVEL_TILE_SIZE - PLAYER_HIT_H;
+              foundCol = true; break;
+            }
+          }
+          if (foundCol) break;
+        }
+      } else {
+        safeX = Math.max(0, PIT_START - 60);
+        p.y = activeGroundY - PLAYER_HIT_H;
+      }
+      p.x = safeX;
       p.vy = 0;
       p.onGround = true;
+      p.airAttackUsed = false;
     } else {
-      p.y = GROUND_Y - PLAYER_HIT_H;
+      p.y = activeGroundY - PLAYER_HIT_H;
       p.vy = 0;
       p.onGround = true;
+      p.airAttackUsed = false;
     }
   }
   platformLand(p);
@@ -1033,10 +1200,17 @@ function updatePlayer() {
   else if (!p.onGround) newAnim = 'jump';
   else if (moving) newAnim = 'run';
 
+  if (p.hurtFrames > HURT_IFRAMES - 24 && p.attackFrames <= 0) newAnim = 'hurt';
+
   if (newAnim !== p.anim) { p.anim = newAnim; p.animTick = 0; p.animFrame = 0; }
   const animDef = SOJU_FRAMES[p.anim] || SOJU_FRAMES.idle;
   p.animTick++;
-  if (p.animTick >= animDef.dur) { p.animTick = 0; p.animFrame = (p.animFrame + 1) % animDef.frames.length; }
+  if (p.animTick >= animDef.dur) {
+    p.animTick = 0;
+    const last = animDef.frames.length - 1;
+    if (animDef.loop === false) p.animFrame = Math.min(p.animFrame + 1, last);
+    else p.animFrame = (p.animFrame + 1) % animDef.frames.length;
+  }
 }
 
 function hurtPlayer() {
@@ -1055,6 +1229,14 @@ function hurtPlayer() {
 function updateEnemies() {
   for (const e of enemies) {
     if (!e.alive) continue;
+
+    // 掉落坑洞死亡檢測
+    if (e.y > H + 100) {
+      e.alive = false;
+      killCount++;
+      SFX.kill();
+      continue;
+    }
 
     // 1. 致命擊殺死亡飛出物理 (Death Launch Physics)
     if (e.deathLaunched) {
@@ -1100,21 +1282,71 @@ function updateEnemies() {
       e.attackPhase = 'none';
 
       // 方向性衝量位移
-      e.x += e.kbVx;
-      e.y += e.kbVy;
-      e.kbVx *= 0.90;           // 水平阻力衰減
-      e.kbVy += GRAVITY * 0.65;  // 空中受擊浮空重力
+      e.vx = e.kbVx;
+      e.vy = e.kbVy;
+      e.kbVx *= 0.90;
+      e.kbVy += GRAVITY * 0.65;
+    }
 
-      // 落地邊界
-      if (e.y >= e.baseY) {
-        e.y = e.baseY;
-        if (e.kbVy > 3) {
-          e.kbVy = -e.kbVy * 0.3; // 落地輕微回彈
-        } else {
-          e.kbVy = 0;
+    // 通用的物理更新邏輯 (包括受擊與非受擊)
+    if (!e.deathLaunched && e.hitstopTimer <= 0) {
+      if (e.hitStun <= 0) {
+        e.vy += GRAVITY;
+      }
+      
+      e.x += e.vx;
+      e.y += e.vy;
+
+      // 平台與地面碰撞 (由上往下的單向碰撞)
+      let onGround = false;
+      const curBottom = e.y + e.h;
+      const prevBottom = curBottom - e.vy;
+
+      if (customLevel) {
+        const col = Math.floor((e.x + e.w / 2) / CUSTOM_LEVEL_TILE_SIZE);
+        const row = Math.floor(curBottom / CUSTOM_LEVEL_TILE_SIZE);
+        if (col >= 0 && col < customLevel.width && row >= 0 && row < customLevel.height) {
+          if (customLevel.layers.tiles[row * customLevel.width + col] > 0) {
+            const groundY = row * CUSTOM_LEVEL_TILE_SIZE;
+            if (prevBottom <= groundY && curBottom >= groundY) {
+              e.y = groundY - e.h;
+              e.vy = 0;
+              onGround = true;
+            }
+          }
+        }
+      } else {
+        // 預設地板
+        if (curBottom >= activeGroundY) {
+          const cx = e.x + e.w / 2;
+          if (!(cx > PIT_START && cx < PIT_END)) {
+            if (prevBottom <= activeGroundY) {
+              e.y = activeGroundY - e.h;
+              e.vy = 0;
+              onGround = true;
+            }
+          }
+        }
+        // 預設平台
+        for (const plat of PLATFORMS) {
+          if (e.x + e.w > plat.x && e.x < plat.x + plat.w) {
+            if (prevBottom <= plat.y && curBottom >= plat.y) {
+              e.y = plat.y - e.h;
+              e.vy = 0;
+              onGround = true;
+            }
+          }
         }
       }
-      // 處於 HitStun 硬直時，無法移動也無法對玩家造成碰撞傷害
+      e.onGround = onGround;
+    }
+
+    if (e.hitStun > 0) {
+      e.hitStun--;
+      if (e.flashTimer > 0) e.flashTimer--;
+      if (e.hpBarTimer > 0) e.hpBarTimer--;
+      e.isAttacking = false;
+      e.attackPhase = 'none';
       continue;
     }
 
@@ -1129,16 +1361,16 @@ function updateEnemies() {
 
     if (e.type === 'slipper') {
       if (e.attackPhase === 'windup') {
-        // 前搖蓄力預備拍打
+        // 前搖時鎖定主角方向
+        e.dir = distToPlayerX > 0 ? 1 : -1;
         e.attackTimer--;
         if (e.attackTimer <= 0) {
           e.attackPhase = 'strike';
           e.attackTimer = 18;
-          e.isAttacking = true; // 進入傷害判定幀！
+          e.isAttacking = true;
           e.vx = e.dir * 4.6;
         }
       } else if (e.attackPhase === 'strike') {
-        // 主動拍打撲擊中 (傷害判定開啟！)
         e.x += e.vx;
         e.attackTimer--;
         if (e.attackTimer <= 0) {
@@ -1154,67 +1386,55 @@ function updateEnemies() {
           e.attackCooldown = 70 + Math.floor(Math.random() * 30);
         }
       } else {
-        // 正常巡邏巡視（非攻擊狀態，碰到主角不造成傷害）
         e.isAttacking = false;
-        if (isPlayerNearby && e.attackCooldown <= 0) {
+        
+        // 追擊與防掉坑邏輯
+        const chaseRange = 300;
+        const distToPlayer = Math.sqrt(distToPlayerX * distToPlayerX + distToPlayerY * distToPlayerY);
+
+        if (distToPlayer < chaseRange) {
+          // 跟隨主角
           e.dir = distToPlayerX > 0 ? 1 : -1;
-          e.attackPhase = 'windup';
-          e.attackTimer = 22;
+          if (isPlayerNearby && e.attackCooldown <= 0) {
+            e.attackPhase = 'windup';
+            e.attackTimer = 22;
+          }
+        }
+
+        // 偵測前方地面與坑洞
+        const checkDist = 20;
+        const frontX = e.dir > 0 ? e.x + e.w + checkDist : e.x - checkDist;
+        const centerX = frontX;
+        
+        let hasGroundAhead = false;
+        if (customLevel) {
+          const col = Math.floor(frontX / CUSTOM_LEVEL_TILE_SIZE);
+          const row = Math.floor((e.y + e.h + 5) / CUSTOM_LEVEL_TILE_SIZE);
+          if (col >= 0 && col < customLevel.width && row >= 0 && row < customLevel.height) {
+            hasGroundAhead = customLevel.layers.tiles[row * customLevel.width + col] > 0;
+          }
         } else {
-          e.x += e.speed * e.dir;
+          if (e.y + e.h >= activeGroundY - 5) {
+            if (!(centerX > PIT_START && centerX < PIT_END)) hasGroundAhead = true;
+          }
+          for (const plat of PLATFORMS) {
+            if (centerX > plat.x && centerX < plat.x + plat.w && Math.abs(e.y + e.h - plat.y) < 10) {
+              hasGroundAhead = true; break;
+            }
+          }
+        }
+
+        if (!hasGroundAhead && e.onGround) {
+          e.dir *= -1; // 前方沒地，回頭
+        }
+
+        e.vx = e.speed * e.dir;
+
+        // 只有在非追擊狀態下才受 range 限制
+        if (distToPlayer >= chaseRange) {
           if (e.x < e.range[0]) { e.x = e.range[0]; e.dir = 1; }
           if (e.x + e.w > e.range[1]) { e.x = e.range[1] - e.w; e.dir = -1; }
         }
-      }
-    } else if (e.type === 'dyson') {
-      if (e.attackPhase === 'windup') {
-        // 渦輪狂轉蓄力
-        e.attackTimer--;
-        if (e.attackTimer <= 0) {
-          e.attackPhase = 'strike';
-          e.attackTimer = 22;
-          e.isAttacking = true; // 衝撞吸入攻擊判定開啟！
-          e.vx = e.dir * 6.0;
-        }
-      } else if (e.attackPhase === 'strike') {
-        e.x += e.vx;
-        e.attackTimer--;
-        if (e.attackTimer <= 0) {
-          e.attackPhase = 'recover';
-          e.attackTimer = 22;
-          e.isAttacking = false;
-          e.vx = 0;
-        }
-      } else if (e.attackPhase === 'recover') {
-        e.attackTimer--;
-        if (e.attackTimer <= 0) {
-          e.attackPhase = 'none';
-          e.attackCooldown = 85 + Math.floor(Math.random() * 30);
-        }
-      } else {
-        e.isAttacking = false;
-        if (isPlayerNearby && e.attackCooldown <= 0) {
-          e.dir = distToPlayerX > 0 ? 1 : -1;
-          e.attackPhase = 'windup';
-          e.attackTimer = 25;
-        } else {
-          if (e.pause > 0) { e.pause--; }
-          else {
-            e.x += e.speed * e.dir;
-            if (e.x < e.range[0]) { e.x = e.range[0]; e.dir = 1; e.pause = 26; }
-            if (e.x + e.w > e.range[1]) { e.x = e.range[1] - e.w; e.dir = -1; e.pause = 26; }
-          }
-        }
-      }
-    } else if (e.type === 'ball') {
-      e.vy = (e.vy || 0) + GRAVITY * 0.55;
-      e.y += e.vy;
-      // 當彈力球從高空高速下墜時視為重擊砸地攻擊 (vy > 3.2)！
-      e.isAttacking = (e.vy > 3.2);
-      if (e.y >= e.baseY) {
-        e.y = e.baseY;
-        e.vy = -10.5;
-        e.isAttacking = false; // 觸地反彈上升階段不傷人
       }
     }
 
@@ -1429,11 +1649,11 @@ function updateBoss() {
     } else if (b.nextPattern === 'summon') {
       if (b.actionTick === 10) {
         const ex = player.x < 480 ? 880 : 80;
-        const et = Math.random() < 0.5 ? 'slipper' : 'ball';
+        const et = 'slipper';
         const ne = {
-          type: et, x: ex, y: GROUND_Y - 32, w: et==='slipper'?48:32, h: 32,
+          type: et, x: ex, y: GROUND_Y - 58, w: 88, h: 58,
           dir: ex > 480 ? -1 : 1, range: [50, 900], speed: 1.5, pause: 0, alive: true,
-          vy: 0, baseY: GROUND_Y - 32, animTick: 0,
+          vy: 0, baseY: GROUND_Y - 58, animTick: 0,
         };
         enemies.push(ne);
         b.summonedEnemies.push(ne);
@@ -1476,9 +1696,12 @@ function updateLevel() {
   updateEnemies();
   // 鏡頭跟隨
   const targetCam = player.x - W / 2 + PLAYER_HIT_W / 2;
-  cameraX = Math.max(0, Math.min(LEVEL_WIDTH - W, targetCam));
+  cameraX = Math.max(0, Math.min(Math.max(0, activeLevelWidth - W), targetCam));
+  const levelHeight = customLevel ? customLevel.height * CUSTOM_LEVEL_TILE_SIZE : H;
+  const targetCameraY = customLevel ? player.y - H * 0.5 : 0;
+  cameraY = Math.max(0, Math.min(Math.max(0, levelHeight - H), targetCameraY));
   // 終點
-  if (player.x > GATE_X) {
+  if (player.x > activeGateX) {
     state = 'BOSS_INTRO';
     bossIntroTimer = 0;
     boss = makeBoss();
@@ -1499,18 +1722,28 @@ function updateBossIntro() {
 // ═══════════════════════════════════════════════════════════
 
 function renderBackground() {
-  const bg = assets['bg_livingroom'];
-  if (bg) {
-    // 背景視差：以一半速度捲動
-    const bgScale = H / bg.height;
-    const bgW = bg.width * bgScale;
-    const offset = -(cameraX * 0.4) % bgW;
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(bg, offset, 0, bgW, H);
-    if (offset + bgW < W) ctx.drawImage(bg, offset + bgW, 0, bgW, H);
-  } else {
-    ctx.fillStyle = '#c8a870';
-    ctx.fillRect(0, 0, W, H);
+  const offset = -Math.floor(cameraX * 0.18) % KENNEY_BACKGROUND_TILE_SIZE;
+  for (let y = 0; y < H; y += KENNEY_BACKGROUND_TILE_SIZE) {
+    const tileIndex = y < 240 ? 0 : y < 360 ? 15 : 30;
+    for (let x = offset - KENNEY_BACKGROUND_TILE_SIZE; x < W; x += KENNEY_BACKGROUND_TILE_SIZE) {
+      drawKenneyBackgroundTile(tileIndex, x, y);
+    }
+  }
+}
+
+function renderCustomMap() {
+  const mapX = -cameraX;
+  const mapY = -cameraY;
+  const startCol = Math.max(0, Math.floor(cameraX / CUSTOM_LEVEL_TILE_SIZE) - 1);
+  const endCol = Math.min(customLevel.width, Math.ceil((cameraX + W) / CUSTOM_LEVEL_TILE_SIZE) + 1);
+  for (let row = 0; row < customLevel.height; row++) {
+    for (let col = startCol; col < endCol; col++) {
+      const i = row * customLevel.width + col;
+      const x = mapX + col * CUSTOM_LEVEL_TILE_SIZE;
+      const y = mapY + row * CUSTOM_LEVEL_TILE_SIZE;
+      drawCustomTile('kenney_backgrounds', customLevel.layers.backgrounds[i], x, y);
+      drawCustomTile('kenney_tiles', customLevel.layers.tiles[i], x, y);
+    }
   }
 }
 
@@ -1518,14 +1751,19 @@ function renderPlatforms() {
   for (const p of PLATFORMS) {
     const sx = p.x - cameraX;
     if (sx > W || sx + p.w < 0) continue;
-    const img = assets[p.sprite];
-    if (img) {
-      // 拼貼
-      const tileW = p.w; const tileH = p.h;
-      ctx.drawImage(img, Math.round(sx), p.y, tileW, tileH);
+    if (p.sprite === 'floor') {
+      for (let tx = 0; tx < p.w; tx += KENNEY_TILE_SIZE) {
+        drawKenneyTile(assets['kenney_tiles'], 0, sx + tx, p.y);
+        for (let ty = KENNEY_TILE_SIZE; ty < p.h; ty += KENNEY_TILE_SIZE) {
+          drawKenneyTile(assets['kenney_tiles'], 20, sx + tx, p.y + ty);
+        }
+      }
+    } else if (p.sprite === 'kenney') {
+      for (let tx = 0; tx < p.w; tx += KENNEY_TILE_SIZE) {
+        drawKenneyTile(assets['kenney_tiles'], 21, sx + tx, p.y);
+      }
     } else {
-      ctx.fillStyle = '#8B5E3C';
-      ctx.fillRect(Math.round(sx), p.y, p.w, p.h);
+      drawKenneyTile(assets['kenney_tiles'], 0, sx, p.y);
     }
   }
 }
@@ -1534,7 +1772,16 @@ function renderDecor() {
   for (const d of DECOR_DEFS) {
     const sx = d.x - cameraX;
     if (sx > W || sx + d.w < 0) continue;
-    drawImg(assets[d.type], sx, d.y, d.w, d.h);
+    if (d.type === 'tree') {
+      drawKenneyTile(assets['kenney_tiles'], 153, sx + d.w * 0.18, d.y, d.w / 18);
+      drawKenneyTile(assets['kenney_tiles'], 154, sx + d.w * 0.45, d.y, d.w / 18);
+      drawKenneyTile(assets['kenney_tiles'], 155, sx + d.w * 0.72, d.y, d.w / 18);
+      drawKenneyTile(assets['kenney_tiles'], 173, sx + d.w * 0.28, d.y + d.h * 0.35, d.w / 18);
+      drawKenneyTile(assets['kenney_tiles'], 174, sx + d.w * 0.55, d.y + d.h * 0.35, d.w / 18);
+    } else if (d.type === 'gate') {
+      drawKenneyTile(assets['kenney_tiles'], 21, sx, d.y, d.w / 18);
+      drawKenneyTile(assets['kenney_tiles'], 41, sx, d.y + d.h * 0.35, d.w / 18);
+    }
   }
 }
 
@@ -1542,15 +1789,10 @@ function renderPit() {
   const sx = PIT_START - cameraX;
   if (sx < W && sx + (PIT_END - PIT_START) > 0) {
     const pw = PIT_END - PIT_START;
-    ctx.fillStyle = '#0a0614';
-    ctx.fillRect(Math.round(sx), GROUND_Y, pw, H - GROUND_Y);
-    // 坑邊緣
-    ctx.fillStyle = '#1a1030';
-    ctx.fillRect(Math.round(sx), GROUND_Y, pw, 10);
-    // 坑裡散落玩具（裝飾）
-    ctx.font = '22px serif';
-    ctx.fillText('🎮', Math.round(sx) + 10, GROUND_Y + 40);
-    ctx.fillText('🧸', Math.round(sx) + 50, GROUND_Y + 55);
+    for (let x = 0; x < pw; x += KENNEY_TILE_SIZE) {
+      drawKenneyTile(assets['kenney_tiles'], 53, sx + x, GROUND_Y);
+      drawKenneyTile(assets['kenney_tiles'], 73, sx + x, GROUND_Y + KENNEY_TILE_SIZE);
+    }
   }
 }
 
@@ -1558,16 +1800,23 @@ function renderEnemies() {
   for (const e of enemies) {
     if (!e.alive) continue;
     const sx = e.x - cameraX;
+    const sy = e.y - cameraY;
     if (sx > W + 80 || sx + e.w < -80) continue;
-    const img = assets[e.type];
     const flipX = e.dir ? e.dir < 0 : false;
+
+    // 取得敵人素材的原始比例
+    const charSheet = assets['kenney_characters'];
+    const charW = KENNEY_CHARACTER_TILE_SIZE;
+    const charH = KENNEY_CHARACTER_TILE_SIZE;
+    const targetH = e.h;
+    const targetW = targetH * (charW / charH); // 保持 1:1 或原始比例
 
     ctx.save();
     // 死亡飛出旋轉 (Death Launch)
     if (e.deathLaunched) {
-      ctx.translate(sx + e.w / 2, e.y + e.h / 2);
+      ctx.translate(sx + e.w / 2, sy + e.h / 2);
       ctx.rotate(e.spinAngle);
-      drawImg(img, -e.w / 2, -e.h / 2, e.w, e.h, false);
+      drawKenneyCharacterTile(0, -targetW / 2, -targetH / 2, targetW, targetH, false);
     } else {
       // 受擊微抖動 (Hitstop Vibration)
       let shakeX = 0, shakeY = 0;
@@ -1585,7 +1834,7 @@ function renderEnemies() {
       if (e.flashTimer > 0) {
         ctx.filter = 'brightness(2.8) saturate(0.2)';
       }
-      drawImg(img, sx + shakeX, e.y + shakeY, e.w, e.h, flipX);
+      drawKenneyCharacterTile(0, sx + shakeX + (e.w - targetW) / 2, sy + shakeY, targetW, targetH, flipX);
     }
     ctx.restore();
 
@@ -1594,17 +1843,29 @@ function renderEnemies() {
       ctx.save();
       ctx.font = 'bold 18px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('⚠️', sx + e.w / 2, e.y - 14);
+      ctx.fillText('⚠️', sx + e.w / 2, e.y - cameraY - 14);
       ctx.restore();
     }
 
-    // 敵人攻擊中紅色氣浪特效
-    if (e.isAttacking && !e.deathLaunched) {
+    // 敵人攻擊揮砍特效 (Slash VFX)
+    if (e.isAttacking && !e.deathLaunched && e.attackPhase === 'strike') {
       ctx.save();
-      ctx.fillStyle = 'rgba(255, 60, 0, 0.35)';
+      const slashX = sx + e.w / 2 + e.dir * 30;
+      const slashY = sy + e.h / 2;
+      const progress = e.attackTimer / 18; // strike 期間 18 frame
+      ctx.translate(slashX, slashY);
+      if (e.dir < 0) ctx.scale(-1, 1);
       ctx.beginPath();
-      ctx.arc(sx + e.w / 2, e.y + e.h / 2, Math.max(e.w, e.h) * 0.55, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(0, 0, 45, -Math.PI / 3, Math.PI / 3);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${progress})`;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      // 內層紅光
+      ctx.beginPath();
+      ctx.arc(0, 0, 40, -Math.PI / 3, Math.PI / 3);
+      ctx.strokeStyle = `rgba(255, 50, 50, ${progress * 0.7})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
       ctx.restore();
     }
 
@@ -1612,7 +1873,7 @@ function renderEnemies() {
     if (e.hpBarTimer > 0 && e.maxHp > 1 && !e.deathLaunched) {
       const barW = 44, barH = 5;
       const barX = sx + (e.w - barW) / 2;
-      const barY = e.y - 12;
+      const barY = e.y - cameraY - 12;
       ctx.fillStyle = 'rgba(0,0,0,0.65)';
       ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
       const fillW = Math.max(0, (e.hp / e.maxHp) * barW);
@@ -1625,7 +1886,7 @@ function renderEnemies() {
 function renderPlayer() {
   const p = player;
   const px = p.x - cameraX - (PLAYER_DRAW_W - PLAYER_HIT_W) / 2;
-  const py = p.y - (PLAYER_DRAW_H - PLAYER_HIT_H);
+  const py = p.y - cameraY - (PLAYER_DRAW_H - PLAYER_HIT_H);
 
   // 無敵閃爍（每 6 frame 閃一次）
   if (p.hurtFrames > 0 && Math.floor(p.hurtFrames / 6) % 2 === 0) {
@@ -1635,8 +1896,7 @@ function renderPlayer() {
   const animDef = SOJU_FRAMES[p.anim] || SOJU_FRAMES.idle;
   const frameIndex = p.animFrame % animDef.frames.length;
   const frame = animDef.frames[frameIndex];
-  const img = assets[p.anim] || assets['idle'];
-  drawSprite(img, frame, px, py, PLAYER_DRAW_W, PLAYER_DRAW_H, p.facing < 0);
+  drawSojuFrame(p.anim, frameIndex, px, py, PLAYER_DRAW_W, PLAYER_DRAW_H, p.facing < 0);
 
   ctx.globalAlpha = 1;
 }
@@ -1647,7 +1907,6 @@ function renderBossCreature() {
   const bw = 120, bh = 150;
   const bx = b.x - (bw - b.w) / 2;
   const by = b.y - (bh - b.h);
-  const img = b.revealed ? assets['boss_revealed'] : assets['boss_cloaked'];
 
   // telegraph 抖動
   let shake = 0;
@@ -1662,16 +1921,16 @@ function renderBossCreature() {
     b.flashTimer--;
     ctx.filter = 'brightness(2.6)';
   }
-  drawImg(img, bx + shake, by + deadSink, bw, bh, b.facing < 0);
+  drawKenneyCharacterTile(8, bx + shake, by + deadSink, bw, bh, b.facing < 0);
   ctx.restore();
 
   // Boss 彈幕
   for (const p of projectiles) {
-    drawImg(assets['boss_droplet'], p.x - 8, p.y - 8, 16, 16);
+    drawKenneyCharacterTile(18, p.x - 8, p.y - 8, 16, 16);
   }
   // 震波
   for (const s of shockwaves) {
-    drawImg(assets['boss_shockwave'], s.x, s.y, s.w, s.h, s.vx < 0);
+    drawKenneyTile(assets['kenney_tiles'], 53, s.x, s.y, s.w / 18);
   }
 }
 
@@ -1746,36 +2005,13 @@ function renderBossHUD() {
 }
 
 function renderStoryScene(scene) {
-  // 深色背景
-  const alpha = Math.min(1, storyTick / 20);
-  ctx.fillStyle = scene === 2 ? `rgba(10,5,20,${alpha})` : `rgba(30,20,50,${alpha})`;
-  ctx.fillRect(0, 0, W, H);
-
-  const midY = H / 2 - 40;
-
-  if (scene === 0) {
-    // 主人餵食
-    drawSprite(assets['owner'], OWNER_FRAME, 200, midY - 100, 80, 200);
-    drawImg(assets['decor_snack'], 295, midY + 50, 36, 36);
-    // Soju idle
-    const sp = SOJU_FRAMES.idle;
-    const f = sp.frames[Math.floor(storyTick / sp.dur) % sp.frames.length];
-    drawSprite(assets['idle'], f, 370, midY + 30, 90, 80);
-  } else if (scene === 1) {
-    drawSprite(assets['owner'], OWNER_FRAME, 150, midY - 90, 80, 200);
-    drawImg(assets['boss_cloaked'], 650, midY - 60, 90, 160);
-  } else if (scene === 2) {
-    drawSprite(assets['owner'], OWNER_FRAME, 220, midY - 40, 60, 150);
-    drawImg(assets['cage'], 280, midY - 20, 100, 90);
-    drawImg(assets['boss_cloaked'], 550, midY - 60, 80, 150);
-  } else if (scene === 3) {
-    drawImg(assets['boss_cloaked'], 550, midY - 60, 80, 150);
-    drawImg(assets['cage'], 430, midY - 10, 100, 90);
-  } else if (scene === 4) {
-    // Soju 特寫
-    const sp = SOJU_FRAMES.bite;
-    const f = sp.frames[Math.floor(storyTick / sp.dur) % 4];
-    drawSprite(assets['bite'], f, W/2 - 80, midY - 30, 160, 140);
+  const sceneImg = assets[`scene0${scene + 1}`];
+  if (sceneImg) {
+    ctx.drawImage(sceneImg, 0, 0, W, H);
+  } else {
+    // fallback
+    ctx.fillStyle = '#1a1220';
+    ctx.fillRect(0, 0, W, H);
   }
 }
 
@@ -1796,7 +2032,7 @@ function renderTitle() {
   const sp = SOJU_FRAMES.idle;
   const t = Math.floor(titleTick / sp.dur) % sp.frames.length;
   const f = sp.frames[t];
-  drawSprite(assets['idle'], f, W / 2 - 80, 120, 160, 140);
+  drawSojuFrame('idle', t, W / 2 - 80, 120, 160, 140);
 
   // 標題文字
   ctx.textAlign = 'center';
@@ -1824,11 +2060,11 @@ function renderStory() {
   renderStoryScene(storyScene);
   // 字幕
   const captions = [
-    '平凡的一天，主人正在餵Soju吃最愛的零食♪',
-    '咦？誰進來了...一團神祕的斗篷身影！',
-    '什麼！主人被關進了狗狗運輸籠！',
-    '神祕魔王帶著主人消失在門外...',
-    'Soju：...哼，我來救你。（按空白鍵開始冒險）',
+    '妍霏跟 SOJU 過得好開心！',
+    '突然間，出現了恐怖的黃色怪物！',
+    '什麼！怪物把妍霏給關起來了！',
+    '天啊！不要～快放開主人！',
+    'Soju：我一定會去救你的，主人！（按空白鍵開始冒險）',
   ];
   ctx.fillStyle = 'rgba(0,0,0,0.72)';
   ctx.fillRect(0, H - 90, W, 90);
@@ -1843,10 +2079,14 @@ function renderStory() {
 }
 
 function renderLevel() {
-  renderBackground();
-  renderPlatforms();
-  renderDecor();
-  renderPit();
+  if (customLevel) {
+    renderCustomMap();
+  } else {
+    renderBackground();
+    renderPlatforms();
+    renderDecor();
+    renderPit();
+  }
   renderEnemies();
   renderPlayer();
   VFXManager.render(ctx, cameraX);
@@ -1858,14 +2098,13 @@ function renderBossIntro() {
   ctx.fillStyle = '#1a0810';
   ctx.fillRect(0, 0, W, H);
   const b = boss;
-  const bImg = b.revealed ? assets['boss_revealed'] : assets['boss_cloaked'];
   const bw = 160, bh = 210;
-  drawImg(bImg, W / 2 - bw / 2, H / 2 - bh / 2 - 20, bw, bh);
+  drawKenneyCharacterTile(8, W / 2 - bw / 2, H / 2 - bh / 2 - 20, bw, bh);
 
   // 玩家
   const sp = SOJU_FRAMES.idle;
   const f = sp.frames[Math.floor(bossIntroTimer / sp.dur) % sp.frames.length];
-  drawSprite(assets['idle'], f, 60, GROUND_Y - PLAYER_DRAW_H, PLAYER_DRAW_W, PLAYER_DRAW_H, false);
+  drawSojuFrame('idle', Math.floor(bossIntroTimer / sp.dur) % sp.frames.length, 60, GROUND_Y - PLAYER_DRAW_H, PLAYER_DRAW_W, PLAYER_DRAW_H, false);
 
   // 字幕
   const caption = b.revealed
@@ -1884,18 +2123,13 @@ function renderBossIntro() {
 }
 
 function renderBossRoom() {
-  // 暗色房間
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, '#1a0820'); grad.addColorStop(1, '#2a1030');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
-
-  // 地板
-  ctx.fillStyle = '#4a2030';
-  ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-  ctx.fillStyle = '#5a2838';
-  for (let x = 0; x < W; x += 64) ctx.fillRect(x, GROUND_Y, 62, 4);
-
+  renderBackground();
+  for (let x = 0; x < W; x += KENNEY_TILE_SIZE) {
+    drawKenneyTile(assets['kenney_tiles'], 0, x, GROUND_Y);
+    for (let y = GROUND_Y + KENNEY_TILE_SIZE; y < H; y += KENNEY_TILE_SIZE) {
+      drawKenneyTile(assets['kenney_tiles'], 20, x, y);
+    }
+  }
   renderBossCreature();
   renderPlayer();
   VFXManager.render(ctx, 0);
@@ -1905,14 +2139,13 @@ function renderBossRoom() {
 
 function renderWin() {
   winTick++;
-  ctx.fillStyle = '#0a0a20';
-  ctx.fillRect(0, 0, W, H);
-
-  // 主人 + Soju 相聚
-  drawSprite(assets['owner'], OWNER_FRAME, W/2 - 120, H/2 - 130, 80, 200);
-  const sp = SOJU_FRAMES.idle;
-  const f = sp.frames[Math.floor(winTick / sp.dur) % sp.frames.length];
-  drawSprite(assets['idle'], f, W/2 - 20, H/2 + 10, 110, 96);
+  const winImg = assets['scene06'];
+  if (winImg) {
+    ctx.drawImage(winImg, 0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#0a0a20';
+    ctx.fillRect(0, 0, W, H);
+  }
 
   // 愛心裝飾
   const hearts = ['💕', '💖', '✨', '🎉', '🐾'];
@@ -1945,8 +2178,8 @@ function renderLose() {
   ctx.fillRect(0, 0, W, H);
 
   // Soju 失落表情
-  const f = SOJU_FRAMES.idle.frames[0];
-  drawSprite(assets['idle'], f, W/2 - 55, H/2 - 160, 110, 96);
+  const f = SOJU_FRAMES.hurt.frames[0];
+  drawSojuFrame('hurt', 0, W/2 - 55, H/2 - 160, 110, 96);
 
   ctx.textAlign = 'center';
   ctx.font = 'bold 40px Noto Sans TC, sans-serif';
@@ -2038,6 +2271,7 @@ document.getElementById('restartBtn').addEventListener('click', () => {
 });
 
 loadAllAssets().then(() => {
+  loadCustomLevel();
   document.getElementById('loadingScreen').style.display = 'none';
   state = 'TITLE';
   lastTime = performance.now();
