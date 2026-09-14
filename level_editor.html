@@ -50,7 +50,7 @@
       <button id="clear">清空</button><button id="gridToggle">網格：開</button>
     </div>
     <div class="panel-title">素材圖集</div>
-    <div class="palette-tabs"><button class="active" data-palette="tiles">地形</button><button data-palette="backgrounds">背景</button><button data-palette="characters">角色</button></div>
+    <div class="palette-tabs"><button class="active" data-palette="tiles">地形</button><button data-palette="backgrounds">背景</button><button data-palette="characters">角色</button><button data-palette="boss">魔王</button></div>
     <div id="palette" class="palette"></div>
     <div class="tool-help">左鍵放置圖塊，右鍵快速擦除。選「選取移動」框選矩形後，可拖曳整塊圖層內容；按住 Option/Alt 拖曳會複製到新位置。按住中鍵、空白鍵或選擇「平移畫布」可拖動畫面；滾輪縮放。</div>
   </aside>
@@ -83,13 +83,14 @@ const SOURCES = {
   tiles: { src:'imgs/kenney_pixel-platformer/Tilemap/tilemap_packed.png', size:18, cols:20 },
   backgrounds: { src:'imgs/kenney_pixel-platformer/Tilemap/tilemap-backgrounds_packed.png', size:24, cols:15 },
   characters: { src:'imgs/kenney_pixel-platformer/Tilemap/tilemap-characters_packed.png', size:24, cols:9 },
+  boss: { src:'imgs/boss/idle/frame_01.png', size:200, cols:1 },
 };
 const images = {};
 const canvas = document.getElementById('editorCanvas');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 const wrap = document.getElementById('canvasWrap');
-let map = { name:'soju-outdoor-01', width:240, height:20, layers:{ tiles:[], backgrounds:[], characters:[] } };
+let map = { name:'soju-outdoor-01', width:240, height:20, layers:{ tiles:[], backgrounds:[], characters:[], boss:[] } };
 let activePalette = 'tiles';
 let selectedTile = 0;
 let tool = 'paint';
@@ -111,7 +112,7 @@ let copyingSelection = false;
 
 function loadImage(name, src) { return new Promise(resolve => { const img = new Image(); img.onload=()=>{images[name]=img;resolve();}; img.onerror=()=>resolve(); img.src=src; }); }
 function blankLayer() { return Array.from({length:map.width * map.height}, () => 0); }
-function ensureLayers() { for (const key of Object.keys(SOURCES)) { if (!map.layers[key] || map.layers[key].length !== map.width * map.height) map.layers[key] = blankLayer(); } }
+function ensureLayers() { for (const key of Object.keys(SOURCES)) { if (!map.layers[key] || map.layers[key].length !== map.width * map.height) map.layers[key] = blankLayer(); } if (!map.layers.boss || map.layers.boss.length !== map.width * map.height) map.layers.boss = blankLayer(); }
 function indexAt(col,row) { return row * map.width + col; }
 function snapshot() { return JSON.stringify(map); }
 function restore(value) { map = JSON.parse(value); ensureLayers(); document.getElementById('mapName').value=map.name; document.getElementById('mapWidth').value=map.width; document.getElementById('mapHeight').value=map.height; render(); }
@@ -125,17 +126,33 @@ function tileFromPointer(event) { const rect=canvas.getBoundingClientRect(); ret
 function drawTile(sheet, index, x, y, size) { const source=SOURCES[sheet]; const img=images[sheet]; if(!img || !index) return; const sx=(index-1)%source.cols*source.size; const sy=Math.floor((index-1)/source.cols)*source.size; ctx.drawImage(img,sx,sy,source.size,source.size,Math.round(x),Math.round(y),TILE*zoom,TILE*zoom); }
 function normalizeSelection(a,b) { return { x:Math.min(a.col,b.col), y:Math.min(a.row,b.row), w:Math.abs(a.col-b.col)+1, h:Math.abs(a.row-b.row)+1 }; }
 function selectionContains(selectionBox, pos) { return selectionBox && pos.col >= selectionBox.x && pos.row >= selectionBox.y && pos.col < selectionBox.x + selectionBox.w && pos.row < selectionBox.y + selectionBox.h; }
-function captureSelection(box) { return Object.fromEntries(Object.keys(SOURCES).map(key => [key, Array.from({length:box.h}, (_, row) => Array.from({length:box.w}, (_, col) => map.layers[key][indexAt(box.x + col, box.y + row)] || 0))])); }
-function applySelection(sourceBox, destinationBox, data, clearSource = true) { for (const key of Object.keys(SOURCES)) { if (clearSource) for (let row=0;row<sourceBox.h;row++) for (let col=0;col<sourceBox.w;col++) if(sourceBox.x+col>=0&&sourceBox.y+row>=0&&sourceBox.x+col<map.width&&sourceBox.y+row<map.height) map.layers[key][indexAt(sourceBox.x+col,sourceBox.y+row)]=0; for (let row=0;row<destinationBox.h;row++) for (let col=0;col<destinationBox.w;col++) { const x=destinationBox.x+col,y=destinationBox.y+row; if(x>=0&&y>=0&&x<map.width&&y<map.height) map.layers[key][indexAt(x,y)]=data[key][row][col]; } } }
+function captureSelection(box) { 
+  const result = Object.fromEntries(Object.keys(SOURCES).map(key => [key, Array.from({length:box.h}, (_, row) => Array.from({length:box.w}, (_, col) => map.layers[key][indexAt(box.x + col, box.y + row)] || 0))])); 
+  result.boss = Array.from({length:box.h}, (_, row) => Array.from({length:box.w}, (_, col) => (map.layers.boss && map.layers.boss[indexAt(box.x + col, box.y + row)]) || 0));
+  return result;
+}
+function applySelection(sourceBox, destinationBox, data, clearSource = true) { 
+  for (const key of Object.keys(SOURCES)) { 
+    if (clearSource) for (let row=0;row<sourceBox.h;row++) for (let col=0;col<sourceBox.w;col++) if(sourceBox.x+col>=0&&sourceBox.y+row>=0&&sourceBox.x+col<map.width&&sourceBox.y+row<map.height) map.layers[key][indexAt(sourceBox.x+col,sourceBox.y+row)]=0; 
+    for (let row=0;row<destinationBox.h;row++) for (let col=0;col<destinationBox.w;col++) { const x=destinationBox.x+col,y=destinationBox.y+row; if(x>=0&&y>=0&&x<map.width&&y<map.height) map.layers[key][indexAt(x,y)]=data[key][row][col]; } 
+  }
+  // Handle boss layer separately
+  if (data.boss) {
+    if (clearSource && map.layers.boss) {
+      for (let row=0;row<sourceBox.h;row++) for (let col=0;col<sourceBox.w;col++) if(sourceBox.x+col>=0&&sourceBox.y+row>=0&&sourceBox.x+col<map.width&&sourceBox.y+row<map.height) map.layers.boss[indexAt(sourceBox.x+col,sourceBox.y+row)]=0;
+    }
+    for (let row=0;row<destinationBox.h;row++) for (let col=0;col<destinationBox.w;col++) { const x=destinationBox.x+col,y=destinationBox.y+row; if(x>=0&&y>=0&&x<map.width&&y<map.height && map.layers.boss) map.layers.boss[indexAt(x,y)]=data.boss[row][col]; }
+  }
+}
 function render() {
   ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#d8eef0'; ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.save(); ctx.translate(origin.x,origin.y);
-  for (let row=0;row<map.height;row++) for (let col=0;col<map.width;col++) { const x=col*TILE*zoom,y=row*TILE*zoom; const i=indexAt(col,row); drawTile('backgrounds',map.layers.backgrounds[i],x,y); drawTile('tiles',map.layers.tiles[i],x,y); drawTile('characters',map.layers.characters[i],x,y); }
+  for (let row=0;row<map.height;row++) for (let col=0;col<map.width;col++) { const x=col*TILE*zoom,y=row*TILE*zoom; const i=indexAt(col,row); drawTile('backgrounds',map.layers.backgrounds[i],x,y); drawTile('tiles',map.layers.tiles[i],x,y); drawTile('characters',map.layers.characters[i],x,y); drawTile('boss',map.layers.boss[i],x,y); }
   if(gridOn){ ctx.strokeStyle='rgba(35,55,62,.18)'; ctx.lineWidth=1; for(let x=0;x<=map.width*TILE*zoom;x+=TILE*zoom){ctx.beginPath();ctx.moveTo(x+.5,0);ctx.lineTo(x+.5,map.height*TILE*zoom);ctx.stroke();} for(let y=0;y<=map.height*TILE*zoom;y+=TILE*zoom){ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(map.width*TILE*zoom,y+.5);ctx.stroke();} }
   if (selection) { ctx.fillStyle='rgba(232,95,63,.16)'; ctx.fillRect(selection.x*TILE*zoom, selection.y*TILE*zoom, selection.w*TILE*zoom, selection.h*TILE*zoom); ctx.strokeStyle='#e85f3f'; ctx.lineWidth=2; ctx.strokeRect(selection.x*TILE*zoom+.5, selection.y*TILE*zoom+.5, selection.w*TILE*zoom-1, selection.h*TILE*zoom-1); }
   ctx.restore();
 }
-function buildPalette() { const box=document.getElementById('palette'); box.innerHTML=''; const source=SOURCES[activePalette]; const img=images[activePalette]; if(!img)return; const count=activePalette==='characters'?1:Math.floor(img.width/source.size)*Math.floor(img.height/source.size); for(let n=0;n<count;n++){ const button=document.createElement('button'); button.className='swatch'+(n===selectedTile?' selected':''); const c=document.createElement('canvas'); c.width=source.size;c.height=source.size; const cctx=c.getContext('2d');cctx.imageSmoothingEnabled=false;cctx.drawImage(img,(n%source.cols)*source.size,Math.floor(n/source.cols)*source.size,source.size,source.size,0,0,source.size,source.size);button.append(c);const label=document.createElement('small');label.textContent=activePalette==='characters'?'敵人':n;button.append(label);button.onclick=()=>{selectedTile=n;document.getElementById('selectedTile').value=n;box.querySelectorAll('.swatch').forEach(x=>x.classList.remove('selected'));button.classList.add('selected');setTool('paint');};box.append(button); } }
+function buildPalette() { const box=document.getElementById('palette'); box.innerHTML=''; const source=SOURCES[activePalette]; const img=images[activePalette]; if(!img)return; const count=activePalette==='characters'||activePalette==='boss'?1:Math.floor(img.width/source.size)*Math.floor(img.height/source.size); for(let n=0;n<count;n++){ const button=document.createElement('button'); button.className='swatch'+(n===selectedTile?' selected':''); const c=document.createElement('canvas'); c.width=source.size;c.height=source.size; const cctx=c.getContext('2d');cctx.imageSmoothingEnabled=false;cctx.drawImage(img,(n%source.cols)*source.size,Math.floor(n/source.cols)*source.size,source.size,source.size,0,0,source.size,source.size);button.append(c);const label=document.createElement('small');label.textContent=activePalette==='characters'?'敵人':activePalette==='boss'?'魔王':n;button.append(label);button.onclick=()=>{selectedTile=n;document.getElementById('selectedTile').value=n;box.querySelectorAll('.swatch').forEach(x=>x.classList.remove('selected'));button.classList.add('selected');setTool('paint');};box.append(button); } }
 function paintAt(col,row) { if(col<0||row<0||col>=map.width||row>=map.height)return; const i=indexAt(col,row); const layer=map.layers[activePalette]; const next=tool==='erase'?0:selectedTile+1; if(layer[i]===next)return; layer[i]=next; render(); }
 function flood(col,row) { if(col<0||row<0||col>=map.width||row>=map.height)return; const layer=map.layers[activePalette], start=layer[indexAt(col,row)], next=tool==='erase'?0:selectedTile+1; if(start===next)return; const queue=[[col,row]], seen=new Set(); while(queue.length){const [x,y]=queue.shift(),key=`${x},${y}`;if(seen.has(key)||x<0||y<0||x>=map.width||y>=map.height||layer[indexAt(x,y)]!==start)continue;seen.add(key);layer[indexAt(x,y)]=next;queue.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);} render(); }
 function exportMap() { const data=JSON.stringify({...map, version:1, tileSize:TILE},null,2); const blob=new Blob([data],{type:'application/json'}); const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${map.name||'soju-level'}.json`;a.click();URL.revokeObjectURL(a.href); document.getElementById('status').textContent='已匯出 JSON'; }

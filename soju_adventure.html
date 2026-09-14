@@ -99,7 +99,7 @@ const GROUND_Y = 460;
 const PIT_START = 860, PIT_END = 955;
 const LEVEL_WIDTH = 3200;
 const GATE_X = 3100;
-const MAX_SPEED = 3.5;       // 最大水平移動速度
+const MAX_SPEED = 4.5;       // 最大水平移動速度
 const ACCEL = 0.28;          // 地面起步加速度
 const DECEL = 0.32;          // 地面摩擦減速
 const AIR_ACCEL = 0.22;      // 空中水平加速度
@@ -112,6 +112,7 @@ const ATTACK_W = 62, ATTACK_H = 44;              // 咬擊判定放大
 const ATTACK_ACTIVE = 12;
 const ATTACK_COOLDOWN = 22;
 const HURT_IFRAMES = 80;
+const ENEMY_WINDUP_FRAMES = 55; // 數字越大，前搖時間越長（例如 50 frames 約等於 0.8 秒）
 
 // 統一 soju.jpeg（1024×1024，前兩列 4 幀、後三列 3 幀，灰底）切圖。
 // 4 幀列寬 256px；3 幀列寬約 341px，不能共用同一組 sx/sw。
@@ -158,7 +159,10 @@ let assetsLoaded = 0;
 const SOJU_ACTION_FRAME_COUNTS = {
   idle: 2, run: 3, jump: 1, attack_head: 1, attack_punch: 2, attack_kick: 3, hurt: 1,
 };
-const TOTAL_ASSETS = 28;
+const BOSS_ACTION_FRAME_COUNTS = {
+  idle: 4, move: 4, attack: 3, spray: 3,
+};
+const TOTAL_ASSETS = 28 + 14; // 14 boss frames
 const KENNEY_TILE_SIZE = 18;
 const KENNEY_BACKGROUND_TILE_SIZE = 24;
 const KENNEY_CHARACTER_TILE_SIZE = 24;
@@ -217,6 +221,12 @@ async function loadAllAssets() {
       return loadImage(`soju_${action}_${index + 1}`, `imgs/soju/${action}/frame_${frame}.png`);
     })
   );
+  const bossFrameLoads = Object.entries(BOSS_ACTION_FRAME_COUNTS).flatMap(([action, count]) =>
+    Array.from({ length: count }, (_, index) => {
+      const frame = String(index + 1).padStart(2, '0');
+      return loadImage(`boss_${action}_${index + 1}`, `imgs/boss/${action}/frame_${frame}.png`);
+    })
+  );
   await Promise.all([
     loadWithChromaKey('owner',        'imgs/owner.jpeg',        [123,123,123]),
     loadImage('kenney_tiles',       'imgs/kenney_pixel-platformer/Tilemap/tilemap_packed.png'),
@@ -232,6 +242,7 @@ async function loadAllAssets() {
     loadImage('scene05',       'imgs/scene05.jpeg'),
     loadImage('scene06',       'imgs/scene06.jpeg'),
     ...sojuFrameLoads,
+    ...bossFrameLoads,
   ]);
 }
 
@@ -239,6 +250,17 @@ function sojuFrameImage(action, frameIndex) {
   const sourceAction = action === 'bite' ? 'attack_head' : action;
   const frameCount = SOJU_ACTION_FRAME_COUNTS[sourceAction] || 1;
   return assets[`soju_${sourceAction}_${(frameIndex % frameCount) + 1}`];
+}
+
+function bossFrameImage(action, frameIndex) {
+  const frameCount = BOSS_ACTION_FRAME_COUNTS[action] || 1;
+  const assetName = `boss_${action}_${(frameIndex % frameCount) + 1}`;
+  let img = assets[assetName];
+  if (!img) {
+    console.warn(`Boss asset not found: ${assetName}`);
+    img = assets[`boss_${action}_1`]; // 缺圖時退回本動作第一張，維持視覺一致
+  }
+  return img;
 }
 
 function drawSojuFrame(action, frameIndex, dx, dy, anchorW, targetH, flipX = false) {
@@ -413,6 +435,7 @@ function loadCustomLevel() {
     if (!Array.isArray(candidate.layers.tiles) || candidate.layers.tiles.length !== total) return false;
     if (!Array.isArray(candidate.layers.backgrounds) || candidate.layers.backgrounds.length !== total) candidate.layers.backgrounds = Array(total).fill(0);
     if (!Array.isArray(candidate.layers.characters) || candidate.layers.characters.length !== total) candidate.layers.characters = Array(total).fill(0);
+    if (!Array.isArray(candidate.layers.boss) || candidate.layers.boss.length !== total) candidate.layers.boss = Array(total).fill(0);
     customLevel = candidate;
     activeLevelWidth = customLevel.width * CUSTOM_LEVEL_TILE_SIZE;
     activeGroundY = customLevel.height * CUSTOM_LEVEL_TILE_SIZE;
@@ -478,7 +501,7 @@ function makeEnemyDefs() {
             type: 'slipper',
             x: ex, y: ey, w: EW, h: EH,
             dir: 1, range: [ex - 100, ex + 100],
-            speed: 1.3, pause: 0, baseY: ey,
+            speed: 1, pause: 0, baseY: ey,
             hp: 3, maxHp: 3
           });
         }
@@ -494,6 +517,40 @@ function makeEnemyDefs() {
     { type:'slipper', x:2400, y:activeGroundY-EH, w:EW, h:EH, dir:1, range:[2300,2550], speed:1.3, pause:0, baseY:activeGroundY-EH, hp:3, maxHp:3 },
     { type:'slipper', x:2950, y:activeGroundY-EH, w:EW, h:EH, dir:1, range:[2880,3070], speed:1.3, pause:0, baseY:activeGroundY-EH, hp:3, maxHp:3 },
   ];
+}
+
+function makeBossDefs() {
+  if (customLevel && customLevel.layers && customLevel.layers.boss) {
+    const bosses = [];
+    const bossLayer = customLevel.layers.boss;
+    for (let row = 0; row < customLevel.height; row++) {
+      for (let col = 0; col < customLevel.width; col++) {
+        const bossIdx = bossLayer[row * customLevel.width + col];
+        if (bossIdx > 0) {
+          const bx = col * CUSTOM_LEVEL_TILE_SIZE;
+          const groundY = (row + 1) * CUSTOM_LEVEL_TILE_SIZE;
+          const by = groundY - 150; // Boss height
+          bosses.push({
+            x: bx, y: by, w: 100, h: 140,
+            hp: 15, maxHp: 15,
+            phase: 'idle',
+            timer: 40,
+            lastPattern: null,
+            hitCooldown: 0,
+            revealed: true,
+            facing: -1,
+            vy: 0, onGround: true,
+            flashTimer: 0,
+            summonedEnemies: [],
+            anim: 'idle', animTick: 0, animFrame: 0,
+            attackResistance: 0.7,
+          });
+        }
+      }
+    }
+    return bosses;
+  }
+  return [];
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -803,16 +860,27 @@ const VFXManager = {
     }
   },
 
-  render(ctx, camX) {
-    ctx.save();
+render(ctx, camX, camY = 0) {    ctx.save();
     // 氣浪環
-    for (const r of this.rings) {
+    for (let i = this.rings.length - 1; i >= 0; i--) {
+      const r = this.rings[i];
+      
       ctx.beginPath();
-      ctx.arc(r.x - camX, r.y, r.radius, 0, Math.PI * 2);
+      // 💡 補上 camY (若沒傳入預設為 0)，確保 Y 軸精準對齊 Boss
+      ctx.arc(r.x - camX, r.y - (camY || 0), r.radius, 0, Math.PI * 2);
       ctx.strokeStyle = r.color;
       ctx.lineWidth = r.lineWidth;
       ctx.globalAlpha = Math.max(0, r.alpha);
       ctx.stroke();
+
+      // 💡 動畫更新：讓氣浪環朝中心快速縮小，產生「吸氣/蓄力」視覺感
+      r.radius -= 2.5;
+      r.alpha -= 0.02;
+
+      // 圈圈縮到極小或變透明後自動刪除
+      if (r.radius <= (r.maxRadius || 5) || r.alpha <= 0) {
+        this.rings.splice(i, 1);
+      }
     }
     // 光弧
     for (const s of this.slashes) {
@@ -863,7 +931,7 @@ const justPressed = {};
 let gameState = 'LOADING';
 
 window.addEventListener('keydown', (e) => {
-  if (gameState === 'WIN') return;
+  if (state === 'WIN') return; // Disable all controls in WIN state
   const k = e.key === ' ' ? 'Space' : e.key;
   if (!keys[k]) {
     justPressed[k] = true;
@@ -910,7 +978,7 @@ function makePlayer() {
     vx: 0, vy: 0,
     onGround: false,
     facing: 1, // 1=right, -1=left
-    hearts: 3,
+    hearts: 5,
     hurtFrames: 0,
     attackFrames: 0,
     attackCooldown: 0,
@@ -931,7 +999,7 @@ function makeBoss() {
   return {
     x: 700, y: GROUND_Y - 150,
     w: 100, h: 140,
-    hp: 5, maxHp: 5,
+    hp: 15, maxHp: 15, // Higher HP as requested
     phase: 'idle',
     timer: 40,
     lastPattern: null,
@@ -941,6 +1009,8 @@ function makeBoss() {
     vy: 0, onGround: true,
     flashTimer: 0,
     summonedEnemies: [],
+    anim: 'idle', animTick: 0, animFrame: 0,
+    attackResistance: 0.7, // 70% resistance to player attack interruption
   };
 }
 
@@ -971,9 +1041,17 @@ function resetLevel() {
     attackTimer: 0,
     isAttacking: false,
   }, d));
+  
+  // Load boss from custom level if present
+  const bossDefs = makeBossDefs();
+  if (bossDefs.length > 0) {
+    boss = bossDefs[0]; // Take first boss for now
+  } else {
+    boss = null; // No boss if not placed in level editor
+  }
+  
   projectiles = [];
   shockwaves = [];
-  boss = null;
   killCount = 0;
   cameraX = 0;
   cameraY = 0;
@@ -1157,41 +1235,84 @@ function updatePlayer() {
   // 平台碰撞
   p.onGround = false;
   if (p.y + PLAYER_HIT_H > activeGroundY) {
-    // 黑暗玩具坑
+    // 黑暗玩具坑 - 掉到地圖最下方一律視為坑洞
     const centerX = p.x + PLAYER_HIT_W / 2;
     if (centerX > PIT_START && centerX < PIT_END) {
-      // 掉坑
+      // 掉坑 - 摔死扣一滴血
       hurtPlayer();
       // 尋找左側最近安全點
-      let safeX = 0;
-      if (customLevel) {
-        // 從玩家當前位置往左掃描，找有地的地方
-        for (let col = Math.floor(p.x / CUSTOM_LEVEL_TILE_SIZE); col >= 0; col--) {
-          let foundCol = false;
-          for (let row = 0; row < customLevel.height; row++) {
-            if (customLevel.layers.tiles[row * customLevel.width + col] > 0) {
-              safeX = col * CUSTOM_LEVEL_TILE_SIZE;
-              p.y = row * CUSTOM_LEVEL_TILE_SIZE - PLAYER_HIT_H;
-              foundCol = true; break;
-            }
+    let safeX = 60; // 預設防呆起點
+    let safeY = activeGroundY - PLAYER_HIT_H - 80;
+
+    if (customLevel) {
+      const TILE_SIZE = CUSTOM_LEVEL_TILE_SIZE;
+      let startCol = Math.floor(p.x / TILE_SIZE);
+      let foundPlatform = false;
+
+      // 從玩家當前 X 位置往左掃描 Tile 網格
+      for (let col = startCol; col >= 0; col--) {
+        // 由上往下尋找該行最高（最先遇到）的實體 Tile
+        for (let row = 0; row < customLevel.height; row++) {
+          const tileId = customLevel.layers.tiles[row * customLevel.width + col];
+          if (tileId > 0) {
+            // 找到該列最高處的平台 Tile
+            safeX = col * TILE_SIZE + (TILE_SIZE - PLAYER_HIT_W) / 2;
+            // 計算高點 (多減 70px 確保從高處落下，避免卡地)
+            safeY = row * TILE_SIZE - PLAYER_HIT_H - 70; 
+            foundPlatform = true;
+            break;
           }
-          if (foundCol) break;
         }
-      } else {
-        safeX = Math.max(0, PIT_START - 60);
-        p.y = activeGroundY - PLAYER_HIT_H;
+        if (foundPlatform) break; // 找到最近的左側平台就停止搜尋
       }
-      p.x = safeX;
-      p.vy = 0;
-      p.onGround = true;
-      p.airAttackUsed = false;
     } else {
-      p.y = activeGroundY - PLAYER_HIT_H;
-      p.vy = 0;
-      p.onGround = true;
-      p.airAttackUsed = false;
+      // 預設關卡：重生在坑洞左側邊緣上方高處
+      safeX = Math.max(60, PIT_START - 60);
+      safeY = activeGroundY - PLAYER_HIT_H - 80;
+    }
+
+    // 套用重生座標與動態狀態
+    p.x = safeX;
+    p.y = safeY;
+    p.vx = 0;
+    p.vy = 0;             // 重置速度
+    p.onGround = false;   // 設為在空中，產生自然落下的效果
+    p.airAttackUsed = false;
     }
   }
+  
+// 檢查是否掉到地圖最下方
+if (p.y > H + 50) {
+  hurtPlayer();
+  
+  let safeX = 60;
+  let safeY = activeGroundY - PLAYER_HIT_H - 80;
+
+  if (customLevel) {
+    const TILE_SIZE = CUSTOM_LEVEL_TILE_SIZE;
+    let startCol = Math.floor(p.x / TILE_SIZE);
+    let foundPlatform = false;
+
+    for (let col = startCol; col >= 0; col--) {
+      for (let row = 0; row < customLevel.height; row++) {
+        if (customLevel.layers.tiles[row * customLevel.width + col] > 0) {
+          safeX = col * TILE_SIZE + (TILE_SIZE - PLAYER_HIT_W) / 2;
+          safeY = row * TILE_SIZE - PLAYER_HIT_H - 70;
+          foundPlatform = true;
+          break;
+        }
+      }
+      if (foundPlatform) break;
+    }
+  }
+
+  p.x = safeX;
+  p.y = safeY;
+  p.vx = 0;
+  p.vy = 0;
+  p.onGround = false;
+  p.airAttackUsed = false;
+}
   platformLand(p);
 
   // 動畫狀態
@@ -1223,6 +1344,79 @@ function hurtPlayer() {
   if (p.hearts <= 0) {
     state = 'LOSE';
     document.getElementById('restartBtn').style.display = 'block';
+  }
+}
+
+/**
+ * 1. 地形實體檢測工具
+ */
+function isSolidTile(x, y) {
+  if (!customLevel) return false;
+  const TILE_SIZE = CUSTOM_LEVEL_TILE_SIZE;
+  const col = Math.floor(x / TILE_SIZE);
+  const row = Math.floor(y / TILE_SIZE);
+
+  // 邊界外視為實體牆壁，避免敵人走出地圖
+  if (col < 0 || col >= customLevel.width || row < 0 || row >= customLevel.height) {
+    return true;
+  }
+
+  // 檢查 Tile 圖層是否大於 0 (非空空白)
+  return customLevel.layers.tiles[row * customLevel.width + col] > 0;
+}
+
+/**
+ * 2. 敵人物理與牆壁碰撞處理器
+ * 請在你的敵人迴圈中傳入 enemy 物件
+ */
+function handleEnemyPhysicsAndCollision(entity) {
+  // 1. 水平移動與牆壁碰撞
+  entity.x += entity.vx;
+  
+  if (customLevel) {
+    const TILE_SIZE = CUSTOM_LEVEL_TILE_SIZE;
+    const topY = entity.y + 4;
+    const bottomY = entity.y + entity.h - 4;
+    
+    if (entity.vx > 0) { // 向右撞牆
+      const rightX = entity.x + entity.w;
+      if (isSolidTile(rightX, topY) || isSolidTile(rightX, bottomY)) {
+        const col = Math.floor(rightX / TILE_SIZE);
+        entity.x = col * TILE_SIZE - entity.w - 0.1;
+        entity.vx = 0;
+        if (entity.dir) entity.dir *= -1; // 自動折返
+      }
+    } else if (entity.vx < 0) { // 向左撞牆
+      const leftX = entity.x;
+      if (isSolidTile(leftX, topY) || isSolidTile(leftX, bottomY)) {
+        const col = Math.floor(leftX / TILE_SIZE);
+        entity.x = (col + 1) * TILE_SIZE + 0.1;
+        entity.vx = 0;
+        if (entity.dir) entity.dir *= -1; // 自動折返
+      }
+    }
+  }
+
+  // 2. 垂直重力與地面碰撞
+  if (!entity.onGround) {
+    entity.vy = (entity.vy || 0) + 0.5; // 重力加速度
+    entity.y += entity.vy;
+    
+    if (customLevel) {
+      const TILE_SIZE = CUSTOM_LEVEL_TILE_SIZE;
+      const bottomY = entity.y + entity.h;
+      const leftX = entity.x + 4;
+      const rightX = entity.x + entity.w - 4;
+      
+      if (entity.vy > 0) { // 落地檢測
+        if (isSolidTile(leftX, bottomY) || isSolidTile(rightX, bottomY)) {
+          const row = Math.floor(bottomY / TILE_SIZE);
+          entity.y = row * TILE_SIZE - entity.h;
+          entity.vy = 0;
+          entity.onGround = true;
+        }
+      }
+    }
   }
 }
 
@@ -1368,10 +1562,38 @@ function updateEnemies() {
           e.attackPhase = 'strike';
           e.attackTimer = 18;
           e.isAttacking = true;
-          e.vx = e.dir * 4.6;
+          e.vx = e.dir * 3.2;
         }
       } else if (e.attackPhase === 'strike') {
+        // ❌原本是直接往前衝，沒有防撞牆：
+        // e.x += e.vx;
+        
+        // 💡 改成這樣：加入與移動相同的碰撞檢測，衝刺撞牆就會立刻停下並收招！
         e.x += e.vx;
+        if (customLevel) {
+          const TILE_SIZE = CUSTOM_LEVEL_TILE_SIZE;
+          const topY = e.y + 4;
+          const bottomY = e.y + e.h - 4;
+          
+          if (e.vx > 0) { // 向右衝刺撞牆
+            const rightX = e.x + e.w;
+            if (isSolidTile(rightX, topY) || isSolidTile(rightX, bottomY)) {
+              const col = Math.floor(rightX / TILE_SIZE);
+              e.x = col * TILE_SIZE - e.w - 0.1;
+              e.vx = 0;
+              e.attackTimer = 1; // 撞牆直接結束衝刺進入收招
+            }
+          } else if (e.vx < 0) { // 向左衝刺撞牆
+            const leftX = e.x;
+            if (isSolidTile(leftX, topY) || isSolidTile(leftX, bottomY)) {
+              const col = Math.floor(leftX / TILE_SIZE);
+              e.x = (col + 1) * TILE_SIZE + 0.1;
+              e.vx = 0;
+              e.attackTimer = 1; // 撞牆直接結束衝刺進入收招
+            }
+          }
+        }
+
         e.attackTimer--;
         if (e.attackTimer <= 0) {
           e.attackPhase = 'recover';
@@ -1379,6 +1601,7 @@ function updateEnemies() {
           e.isAttacking = false;
           e.vx = 0;
         }
+
       } else if (e.attackPhase === 'recover') {
         e.attackTimer--;
         if (e.attackTimer <= 0) {
@@ -1397,7 +1620,7 @@ function updateEnemies() {
           e.dir = distToPlayerX > 0 ? 1 : -1;
           if (isPlayerNearby && e.attackCooldown <= 0) {
             e.attackPhase = 'windup';
-            e.attackTimer = 22;
+            e.attackTimer = ENEMY_WINDUP_FRAMES;
           }
         }
 
@@ -1429,6 +1652,8 @@ function updateEnemies() {
         }
 
         e.vx = e.speed * e.dir;
+        // 💡 直接用碰撞函數取代原本單純的 e.x += e.vx
+        handleEnemyPhysicsAndCollision(e);
 
         // 只有在非追擊狀態下才受 range 限制
         if (distToPlayer >= chaseRange) {
@@ -1467,8 +1692,11 @@ function updateEnemies() {
         player.jumpCancelable = move.canJumpCancelOnHit;
         player.canComboCancel = true;
 
-        // 計算重疊幾何中心點 (Contact Point)
+        // 計算重疊幾何中心點 (Contact Point) - 修正 Y 座標使其出現在角色上
         const contact = Hitbox.getContactPoint(attackBox, hurtBox);
+        // 調整 contactY 使其出現在角色中心而非底部
+        contact.y = e.y + e.h / 2 -150; // 修正為敵人中心點
+        
 
         // 扣除敵人血量
         e.hp -= move.damage;
@@ -1535,12 +1763,83 @@ function updateEnemies() {
 
 function updateBoss() {
   const b = boss;
-  if (!b || b.phase === 'dead') return;
+  if (!b) return;
+
+  // 死亡狀態獨立處理在最前面，確保每一幀都會被執行到，不會被其他邏輯擋住
+  if (b.phase === 'dead') {
+    b.timer--;
+    if (b.timer <= 0) {
+      state = 'WIN';
+      winTick = 0;
+      playBirthday();
+      player.hearts = 5;
+    }
+    return;
+  }
+
   if (b.hitCooldown > 0) b.hitCooldown--;
 
-  // 攻擊玩家 hitbox - 只有在 Boss 進行 slam 重砸下墜時才造成直接碰撞傷害！
-  // 單純站在 Boss 旁邊不會受傷！
-  if (b.phase === 'action' && b.nextPattern === 'slam' && b.vy > 1.0) {
+  // Boss physics - gravity and ground collision
+  b.vy += GRAVITY;
+  b.y += b.vy;
+
+  // Ground collision
+  b.onGround = false;
+  if (b.vy >= 0) {
+    const bottom = b.y + b.h;
+    const prevBottom = bottom - b.vy;
+    if (customLevel) {
+      const col = Math.floor((b.x + b.w / 2) / CUSTOM_LEVEL_TILE_SIZE);
+      const row = Math.floor(bottom / CUSTOM_LEVEL_TILE_SIZE);
+      if (col >= 0 && col < customLevel.width && row >= 0 && row < customLevel.height) {
+        if (customLevel.layers.tiles[row * customLevel.width + col] > 0) {
+          const tileTop = row * CUSTOM_LEVEL_TILE_SIZE;
+          if (prevBottom <= tileTop && bottom >= tileTop) {
+            b.y = tileTop - b.h;
+            b.vy = 0;
+            b.onGround = true;
+          }
+        }
+      }
+    } else {
+      if (bottom >= GROUND_Y && prevBottom <= GROUND_Y) {
+        b.y = GROUND_Y - b.h;
+        b.vy = 0;
+        b.onGround = true;
+      }
+      for (const plat of PLATFORMS) {
+        if (b.x + b.w > plat.x && b.x < plat.x + plat.w) {
+          if (prevBottom <= plat.y && bottom >= plat.y) {
+            b.y = plat.y - b.h;
+            b.vy = 0;
+            b.onGround = true;
+          }
+        }
+      }
+    }
+  }
+
+  // Keep boss within bounds
+  const levelWidth = customLevel ? customLevel.width * CUSTOM_LEVEL_TILE_SIZE : LEVEL_WIDTH;
+  b.x = Math.max(50, Math.min(levelWidth - b.w - 50, b.x));
+
+  // Boss 動畫更新
+  if (b.anim !== b.prevAnim) {
+    b.animTick = 0;
+    b.animFrame = 0;
+    b.prevAnim = b.anim;
+  }
+  b.animTick++;
+  const bossAnimDef = { idle: 16, move: 8, attack: 12, spray: 10 };
+  const currentAnimDur = bossAnimDef[b.anim] || 16;
+  if (b.animTick >= currentAnimDur) {
+    b.animTick = 0;
+    const frameCount = BOSS_ACTION_FRAME_COUNTS[b.anim] || 1;
+    b.animFrame = (b.animFrame + 1) % frameCount;
+  }
+
+  // 攻擊玩家 hitbox
+  if (b.phase === 'action' && b.nextPattern === 'attack' && b.actionTick > 8 && b.actionTick < 20) {
     if (aabb(player.x, player.y, PLAYER_HIT_W, PLAYER_HIT_H, b.x, b.y, b.w, b.h)) {
       hurtPlayer();
     }
@@ -1570,6 +1869,7 @@ function updateBoss() {
       b.flashTimer = 8;
 
       const contact = Hitbox.getContactPoint(attackBox, hurtBox);
+      contact.y = b.y + b.h / 2 -120;
       const isKill = b.hp <= 0;
 
       Hitstop.trigger(isKill ? 12 : move.hitstop + 1);
@@ -1588,126 +1888,167 @@ function updateBoss() {
         comboCount: player.comboCount
       });
 
+      if (b.phase === 'action' && Math.random() > b.attackResistance) {
+        // 不打斷 Boss
+      } else if (b.phase !== 'idle') {
+        b.phase = 'recover';
+        b.timer = 20;
+      }
+
       if (b.hp <= 0) {
         b.phase = 'dead';
         b.timer = 90;
         projectiles = [];
         shockwaves = [];
         for (const e of b.summonedEnemies) e.alive = false;
+        return; // 立刻結束，避免本幀繼續跑下方 idle/telegraph/action 狀態機
       }
     }
   }
 
   b.timer--;
-  if (b.phase === 'dead') {
-    if (b.timer <= 0) { state = 'WIN'; winTick = 0; playBirthday(); }
-    return;
-  }
+
+  // 計算 Boss 與玩家中心點的實際距離
+  const distToPlayer = Math.abs((player.x + PLAYER_HIT_W / 2) - (b.x + b.w / 2));
 
   if (b.phase === 'idle') {
+    b.anim = 'idle';
+    const moveDir = player.x - b.x;
+// 💡 1. 這裡不要直接改 b.x，而是設定 b.vx 速度！
+    if (Math.abs(moveDir) > 50) {
+      b.vx = Math.sign(moveDir) * 0.5;
+    } else {
+      b.vx = 0; // 靠近時速度歸零
+    }
+
+    handleEnemyPhysicsAndCollision(b);
+
     if (b.timer <= 0) {
       b.phase = 'telegraph';
       b.timer = 40;
-      // 選招（避免連續）
-      const patterns = ['spray', 'slam', 'summon'];
-      const avail = patterns.filter(p => p !== b.lastPattern);
-      b.nextPattern = avail[Math.floor(Math.random() * avail.length)];
+
+      const SPRAY_RANGE = 450; // 🎯 發射噴彈的最大允許距離 (像素)
+
+      if (distToPlayer <= SPRAY_RANGE) {
+        // 靠近時：隨機在 attack 與 spray 中選擇 (避免連續重複同一招)
+        const patterns = ['attack', 'spray'];
+        const avail = patterns.filter(p => p !== b.lastPattern);
+        b.nextPattern = avail[Math.floor(Math.random() * avail.length)];
+      } else {
+        // 太遠時：強制改成近戰/靠近招式，絕不發射子彈
+        b.nextPattern = 'attack';
+      }
       b.lastPattern = b.nextPattern;
     }
   } else if (b.phase === 'telegraph') {
+    b.anim = 'idle';
+    const moveDir = player.x - b.x;
+    if (Math.abs(moveDir) > 30) {
+      b.x += Math.sign(moveDir) * 0.3;
+    }
+
+    // 💡 招式前搖蓄力特效 (Telegraph Visual Effects)
+    b.shakeOffsetX = (Math.random() - 0.5) * 3;                     // 1. 本體微幅抖動
+    b.flashWhite = Math.floor(b.timer / 4) % 2 === 0;               // 2. 白光頻率閃爍
+
+// 3. 噴彈招式額外產生紅/黃色蓄力縮小氣浪環
+    if (b.nextPattern === 'spray' && b.timer % 8 === 0) {
+      // 計算 Boss 在畫面上的視覺中心 Y 軸 (考慮 150px 的繪製圖高偏移)
+      const bossVisualCenterY = b.y - (150 - b.h) -60; // 💡 +60 剛好會對準 Boss 的胸口/頭部位置
+
+      VFXManager.rings.push({
+        x: b.x + b.w / 2,         // Boss 水平中心
+        y: bossVisualCenterY,     // 精準對齊視覺胸口
+        radius: 50,
+        maxRadius: 8,
+        alpha: 0.9,
+        color: '#ff3366',
+        lineWidth: 3
+      });
+    }
+
     if (b.timer <= 0) {
+      b.shakeOffsetX = 0; // 清除抖動
+      b.flashWhite = false; // 關閉白光
       b.phase = 'action';
-      b.timer = b.nextPattern === 'spray' ? 60 : b.nextPattern === 'slam' ? 80 : 50;
+      b.timer = b.nextPattern === 'spray' ? 90 : 60;
       b.actionTick = 0;
       b.sprayCount = 0;
+      b.anim = b.nextPattern === 'attack' ? 'attack' : 'spray';
     }
   } else if (b.phase === 'action') {
     b.actionTick++;
     if (b.nextPattern === 'spray') {
-      // 每 18 tick 噴一顆
-      if (b.actionTick % 18 === 1 && b.sprayCount < 3) {
+      if (b.actionTick % 50 === 1 && b.sprayCount < 3) {
         b.sprayCount++;
         const dir = player.x < b.x ? -1 : 1;
-        projectiles.push({ x: b.x + b.w/2, y: GROUND_Y - 70, vx: dir * 4.6, w: 16, h: 16, alive: true });
+        projectiles.push({
+          x: b.x + b.w / 2,
+          y: b.y + b.h - 40,
+          vx: dir * 5.5,
+          w: 20,
+          h: 20,
+          alive: true,
+          isSpray: true
+        });
       }
-    } else if (b.nextPattern === 'slam') {
-      if (b.actionTick === 1) {
-        b.vy = -9;
-        b.onGround = false;
+} else if (b.nextPattern === 'attack') {
+      const moveDir = player.x - b.x;
+      
+      // 💡 1. 這裡改成設定速度 b.vx
+      if (Math.abs(moveDir) > 40) {
+        b.vx = Math.sign(moveDir) * 1.5;
+      } else {
+        b.vx = 0;
       }
-      b.vy += 0.5;
-      b.y += b.vy;
-      if (b.y >= GROUND_Y - b.h) {
-        b.y = GROUND_Y - b.h;
-        b.vy = 0;
-        if (!b.onGround) {
-          b.onGround = true;
-          shockwaves.push({ x: b.x - 80, y: GROUND_Y - 18, vx: -5.2, w: 48, h: 18, alive: true });
-          shockwaves.push({ x: b.x + b.w, y: GROUND_Y - 18, vx: 5.2, w: 48, h: 18, alive: true });
-        }
-      }
-    } else if (b.nextPattern === 'summon') {
-      if (b.actionTick === 10) {
-        const ex = player.x < 480 ? 880 : 80;
-        const et = 'slipper';
-        const ne = {
-          type: et, x: ex, y: GROUND_Y - 58, w: 88, h: 58,
-          dir: ex > 480 ? -1 : 1, range: [50, 900], speed: 1.5, pause: 0, alive: true,
-          vy: 0, baseY: GROUND_Y - 58, animTick: 0,
-        };
-        enemies.push(ne);
-        b.summonedEnemies.push(ne);
-      }
+      
+      // 💡 2. 加上碰撞檢測，這樣 Boss 準備用這招靠近時，撞到牆壁就會停下來！
+      handleEnemyPhysicsAndCollision(b);
     }
-    if (b.timer <= 0) { b.phase = 'recover'; b.timer = 70; b.onGround = true; }
+    if (b.timer <= 0) { b.phase = 'recover'; b.timer = 50; b.anim = 'idle'; }
   } else if (b.phase === 'recover') {
-    if (b.timer <= 0) { b.phase = 'idle'; b.timer = 30 + Math.floor(Math.random() * 10); }
+    b.anim = 'idle';
+    if (b.timer <= 0) { b.phase = 'idle'; b.timer = 30 + Math.floor(Math.random() * 20); }
   }
 
-  // Boss 面向玩家
-  b.facing = player.x < b.x + b.w/2 ? -1 : 1;
+  b.facing = player.x < b.x + b.w / 2 ? -1 : 1;
 
-  // 彈幕更新
   for (const p of projectiles) {
     p.x += p.vx;
-    if (p.x < 0 || p.x > W) p.alive = false;
-    if (aabb(player.x, player.y, PLAYER_HIT_W, PLAYER_HIT_H, p.x, p.y, p.w, p.h)) {
+    const levelWidth = customLevel ? customLevel.width * CUSTOM_LEVEL_TILE_SIZE : LEVEL_WIDTH;
+    if (p.x < -50 || p.x > levelWidth + 50) p.alive = false;
+
+    const playerIsJumping = !player.onGround || player.vy < -1;
+    if (p.isSpray && playerIsJumping) {
+      // 玩家跳起來閃過
+    } else if (aabb(player.x, player.y, PLAYER_HIT_W, PLAYER_HIT_H, p.x, p.y, p.w, p.h)) {
       p.alive = false; hurtPlayer();
     }
   }
   projectiles = projectiles.filter(p => p.alive);
 
-  // 震波更新
-  for (const s of shockwaves) {
-    s.x += s.vx;
-    if (s.x < -50 || s.x > W + 50) s.alive = false;
-    if (aabb(player.x, player.y, PLAYER_HIT_W, PLAYER_HIT_H, s.x, s.y, s.w, s.h)) {
-      s.alive = false; hurtPlayer();
-    }
-  }
-  shockwaves = shockwaves.filter(s => s.alive);
-
-  // 召喚小怪也要更新
   updateEnemies();
 }
 
 function updateLevel() {
   updatePlayer();
   updateEnemies();
+  if (boss) updateBoss();
   // 鏡頭跟隨
   const targetCam = player.x - W / 2 + PLAYER_HIT_W / 2;
   cameraX = Math.max(0, Math.min(Math.max(0, activeLevelWidth - W), targetCam));
   const levelHeight = customLevel ? customLevel.height * CUSTOM_LEVEL_TILE_SIZE : H;
   const targetCameraY = customLevel ? player.y - H * 0.5 : 0;
   cameraY = Math.max(0, Math.min(Math.max(0, levelHeight - H), targetCameraY));
-  // 終點
-  if (player.x > activeGateX) {
+  // 終點 - only for default level
+  if (!customLevel && player.x > activeGateX) {
     state = 'BOSS_INTRO';
     bossIntroTimer = 0;
     boss = makeBoss();
     player.x = 60;
     player.y = GROUND_Y - PLAYER_HIT_H;
     player.vx = 0; player.vy = 0;
+    cameraX = 0; cameraY = 0;
   }
 }
 
@@ -1743,6 +2084,8 @@ function renderCustomMap() {
       const y = mapY + row * CUSTOM_LEVEL_TILE_SIZE;
       drawCustomTile('kenney_backgrounds', customLevel.layers.backgrounds[i], x, y);
       drawCustomTile('kenney_tiles', customLevel.layers.tiles[i], x, y);
+      // Don't render static character tiles - they're used only for spawning
+      // Boss rendering is handled separately in renderBossCreature
     }
   }
 }
@@ -1905,39 +2248,62 @@ function renderBossCreature() {
   const b = boss;
   if (!b) return;
   const bw = 120, bh = 150;
-  const bx = b.x - (bw - b.w) / 2;
-  const by = b.y - (bh - b.h);
+  const bx = b.x - (bw - b.w) / 2 - cameraX;
+  const by = b.y - (bh - b.h) - cameraY;
 
-  // telegraph 抖動
+  // telegraph 抖動 (若 updateBoss 有算 b.shakeOffsetX 則優先使用，否則用原本的弦波抖動)
   let shake = 0;
   if (b.phase === 'telegraph') {
-    shake = Math.sin(bossIntroTimer * 0.8 + Date.now() * 0.02) * 3;
+    shake = b.shakeOffsetX !== undefined ? b.shakeOffsetX : Math.sin(bossIntroTimer * 0.8 + Date.now() * 0.02) * 3;
   }
   // dead 下沉
   const deadSink = b.phase === 'dead' ? Math.min((90 - b.timer) * 0.5, 30) : 0;
 
   ctx.save();
+  
+  // 💡 1. 處理閃光效果 (兼顧受傷閃光 b.flashTimer 與 Telegraph 前搖閃爍 b.flashWhite)
   if (b.flashTimer > 0) {
     b.flashTimer--;
     ctx.filter = 'brightness(2.6)';
+  } else if (b.flashWhite) {
+    // Telegraph 蓄力閃爍白光 (讓彩度歸零、亮度大幅提升，呈現純白蓄力感)
+    ctx.filter = 'brightness(3) contrast(0)';
   }
-  drawKenneyCharacterTile(8, bx + shake, by + deadSink, bw, bh, b.facing < 0);
+
+  // 使用實際的 Boss sprite frames
+  const bossImg = bossFrameImage(b.anim, b.animFrame);
+  if (bossImg) {
+    const drawW = bw;
+    const drawH = bh;
+    const drawX = b.facing < 0 ? bx + bw - drawW : bx;
+    drawImg(bossImg, drawX + shake, by + deadSink, drawW, drawH, b.facing < 0);
+  } else {
+    // Fallback to Kenney character if boss sprites not loaded
+    drawKenneyCharacterTile(8, bx + shake, by + deadSink, bw, bh, b.facing < 0);
+  }
   ctx.restore();
 
   // Boss 彈幕
   for (const p of projectiles) {
-    drawKenneyCharacterTile(18, p.x - 8, p.y - 8, 16, 16);
-  }
-  // 震波
-  for (const s of shockwaves) {
-    drawKenneyTile(assets['kenney_tiles'], 53, s.x, s.y, s.w / 18);
+    if (p.isSpray) {
+      // 繪製洗耳液體彈幕
+      ctx.fillStyle = '#ffdd44';
+      ctx.beginPath();
+      ctx.arc(p.x - cameraX, p.y - cameraY, p.w / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ff9900';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      drawKenneyCharacterTile(18, p.x - 8 - cameraX, p.y - 8 - cameraY, 16, 16);
+    }
   }
 }
 
 function renderHUD() {
   const p = player;
   // 愛心
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     const hImg = i < p.hearts ? assets['heart_full'] : assets['heart_empty'];
     drawImg(hImg, 14 + i * 32, 12, 24, 24);
   }
@@ -1994,11 +2360,12 @@ function renderBossHUD() {
   ctx.fillStyle = '#e03060';
   const ratio = Math.max(0, boss.hp / boss.maxHp);
   ctx.fillRect(bx, by, bw * ratio, bh);
-  // 分格
+  // 分格 - 每 3 HP 一格
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 1;
-  for (let i = 1; i < boss.maxHp; i++) {
-    const ix = bx + bw * i / boss.maxHp;
+  const segments = Math.ceil(boss.maxHp / 3);
+  for (let i = 1; i < segments; i++) {
+    const ix = bx + bw * i / segments;
     ctx.beginPath(); ctx.moveTo(ix, by); ctx.lineTo(ix, by + bh); ctx.stroke();
   }
   ctx.strokeRect(bx, by, bw, bh);
@@ -2088,8 +2455,10 @@ function renderLevel() {
     renderPit();
   }
   renderEnemies();
+  renderBossCreature();
   renderPlayer();
   VFXManager.render(ctx, cameraX);
+  renderBossHUD();
   renderHUD();
 }
 
@@ -2123,13 +2492,18 @@ function renderBossIntro() {
 }
 
 function renderBossRoom() {
-  renderBackground();
-  for (let x = 0; x < W; x += KENNEY_TILE_SIZE) {
-    drawKenneyTile(assets['kenney_tiles'], 0, x, GROUND_Y);
-    for (let y = GROUND_Y + KENNEY_TILE_SIZE; y < H; y += KENNEY_TILE_SIZE) {
-      drawKenneyTile(assets['kenney_tiles'], 20, x, y);
+  if (customLevel) {
+    renderCustomMap();
+  } else {
+    renderBackground();
+    for (let x = 0; x < W; x += KENNEY_TILE_SIZE) {
+      drawKenneyTile(assets['kenney_tiles'], 0, x, GROUND_Y);
+      for (let y = GROUND_Y + KENNEY_TILE_SIZE; y < H; y += KENNEY_TILE_SIZE) {
+        drawKenneyTile(assets['kenney_tiles'], 20, x, y);
+      }
     }
   }
+  renderEnemies(); // Render dynamic enemies, not static tiles
   renderBossCreature();
   renderPlayer();
   VFXManager.render(ctx, 0);
@@ -2229,6 +2603,9 @@ function update() {
   } else if (state === 'BOSS') {
     updatePlayer();
     updateBoss();
+  } else if (state === 'WIN') {
+    // WIN state - no updates, player cannot escape
+    return;
   }
   clearJustPressed();
 }
@@ -2264,6 +2641,7 @@ function gameLoop(ts) {
 // 12. 啟動
 // ═══════════════════════════════════════════════════════════
 document.getElementById('restartBtn').addEventListener('click', () => {
+  if (state === 'WIN') return; // Prevent restart in WIN state
   resetLevel();
   state = 'LEVEL';
   document.getElementById('restartBtn').style.display = 'none';
